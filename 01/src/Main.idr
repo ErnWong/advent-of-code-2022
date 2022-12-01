@@ -3,24 +3,33 @@ module Main
 import Control.App
 import Control.App.Console
 import Control.App.FileIO
+import Data.Colist
 import System.File.Virtual
 
 %default total
 
 partial
-hello : Has [FileIO, Console] es => App es()
-hello = do
-    putStr "Enter text: "
-    text <- getLine
+readLines : Has [FileIO, Console] e => App e (Colist String)
+readLines = do
+    putStrLn "Reading next line..."
+    -- TODO: Does this skip the last line?
+    line <- getLine
     eof <- fEOF stdin
     if eof
-        then pure ()
+        then pure []
         else do
-            putStrLn $ "Text is " ++ text
-            hello
+            rest <- readLines
+            pure (line :: rest)
+
+partial
+printLines : Has [Console] e => Colist String -> App e ()
+printLines [] = putStrLn "Done"
+printLines (line :: rest) = do
+    putStrLn $ "Line: " ++ line
+    printLines rest
 
 partial
 main : IO ()
-main = run $ handle hello
+main = run $ handle (readLines >>= printLines)
     (\() => putStr "Ok")
     (\err : IOError => putStr "Error")
