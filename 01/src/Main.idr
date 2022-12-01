@@ -9,7 +9,7 @@ import System.File.Virtual
 %default total
 
 partial
-readLines : Has [FileIO, Console] e => App e (Colist String)
+readLines : Has [FileIO, Console] effects => App effects (Colist String)
 readLines = do
     putStrLn "Reading next line..."
     -- TODO: Does this skip the last line?
@@ -22,7 +22,7 @@ readLines = do
             pure (line :: rest)
 
 partial
-printLines : Has [Console] e => Colist String -> App e ()
+printLines : Has [Console] effects => Colist String -> App effects ()
 printLines [] = putStrLn "Done"
 printLines (line :: rest) = do
     putStrLn $ "Line: " ++ line
@@ -32,4 +32,4 @@ partial
 main : IO ()
 main = run $ handle (readLines >>= printLines)
     (\() => putStr "Ok")
-    (\err : IOError => putStr "Error")
+    (\error : IOError => putStr "Error")
