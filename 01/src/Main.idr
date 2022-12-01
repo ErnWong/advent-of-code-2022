@@ -9,14 +9,13 @@ import System.File.Virtual
 
 partial
 hello : Has [FileIO, Console] es => App es()
-hello = do
+hello = do putStr "Enter text: "
+           text <- getLine
            eof <- fEOF stdin
            if eof
-             then pure ()
-             else do putStr "Enter text: "
-                     text <- getLine
-                     putStrLn $ "Text is " ++ text
-                     hello
+              then pure ()
+              else do putStrLn $ "Text is " ++ text
+                      hello
 
 partial
 main : IO ()
