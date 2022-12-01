@@ -5,8 +5,12 @@ import Control.App.Console
 
 %default total
 
+partial
 hello : Console es => App es()
-hello = getLine >>= \x => putStrLn x >>= \y => putStrLn x
+hello = do putStr "Enter text: "
+           text <- getLine
+           putStrLn $ "Text is " ++ text
+           hello
 
 partial
 main : IO ()
