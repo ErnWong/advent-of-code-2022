@@ -1,12 +1,13 @@
 module Main
 
---import Control.App
---import Control.App.Console
---import Control.App.FileIO
+import Control.App
+import Control.App.Console
+import Control.App.FileIO
 import Control.Monad.Trans
 import Data.Colist
 import System.File.Virtual
-import System.File.ReadWrite
+
+--import System.File.ReadWrite
 
 
 -- Halting problem go brrr...
@@ -252,6 +253,10 @@ partial --todo totality
             = pull (Return value) (downstream (Left value))
 
 
+yield : streamOut -> Pipe streamIn streamOut returnIn effects ()
+yield value = Yield (Return ()) value -- We set Return () as the initial continuation, which can then be built upon monadically
+
+
 Effect : (effects: Type -> Type) -> (return: Type) -> Type
 Effect effects return = Pipe Void Void Void effects return
 
@@ -265,7 +270,19 @@ runPipe (Return value) = pure value
 
 
 partial
-readLinesPipe : Pipe Void String Void IO ()
+readLinesPipeUnending : Pipe Void String Void (App effectsLeftSide) ()
+readLinesPipeUnending = do
+    yield "jokes on you"
+    readLinesPipeUnending
+
+partial
+nothingPipe : Pipe Void Void Void (App effects) ()
+nothingPipe = do
+    Return ()
+
+
+partial
+readLinesPipe : Has [FileIO, Console] effectsLeftSide => Pipe Void String Void (App effectsLeftSide) ()
 readLinesPipe = do
     lift $ putStrLn "Reading next line..."
     -- TODO: Does this skip the last line?
@@ -274,11 +291,12 @@ readLinesPipe = do
     if eof
         then Return ()
         else do
-            Yield (Return ()) line -- Pure () doesn't seem right - don't we want to be the continuation?
+            yield line
             readLinesPipe
 
+
 partial
-printLinesPipe : Pipe String Void () IO ()
+printLinesPipe : Has [Console] effects => Pipe String Void () (App effects) ()
 printLinesPipe = do
     Await $ \next => case next of
         Right value => do
@@ -287,9 +305,64 @@ printLinesPipe = do
             printLinesPipe
         _ => Return ()
 
+
+--interface Applicative m => MyMonad m where
+--    constructor MkMonad
+--    total
+--    thatBindThingy : m a -> (a -> m b) -> m b
+--
+--
+--(MyMonad m) => Monad m where
+--    (>>=) = thatBindThingy
+--
+--
+--MyMonad (App effects) where
+--    --(>>=) = bindApp
+--    thatBindThingy = (>>=)
+--
+--
+--interface Monad m => SeeItIsAMonad m where
+--    iToldYouSo : ()
+--
+--SeeItIsAMonad (App effects) where
+--    iToldYouSo = ()
+
+--data NotAMonad a = Lol a | Lolnot
+--
+--SeeItIsAMonad NotAMonad where
+--    iToldYouSo = ()
+
+-- surelyAMonadicPipe : (Monad m) => Effect m () -> ()
+-- surelyAMonadicPipe p = ()
+-- 
+-- surelyAMonad : (Monad m) => m s -> ()
+-- surelyAMonad x = ()
+
+partial
+pipeline : Has [FileIO, Console] effects => Effect (App effects) ()
+pipeline = readLinesPipe .| printLinesPipe
+
+partial
+app : Has[FileIO, Console] effects => App effects ()
+app = runPipe pipeline
+
 partial
 main : IO ()
-main = runPipe $ readLinesPipe .| printLinesPipe
+main = 
+    run $ handle app
+        (\() => putStr "Ok")
+        (\error : IOError => putStr "Error")
+    --let
+    --    --pipeline = readLinesPipeUnending .| printLinesPipe
+    --    --mymonad : List Nat
+    --    --mymonad = [1, 2, 3]
+    --    --y = surelyAMonad mymonad
+    --    --x = surelyAMonadicPipe nothingPipe
+    --    --applyThing = runPipe nothingPipe
+    --    --appyThing = runPipe pipeline
+    --in
+    --    ?runwat
+    --run $ runPipe $ readLinesPipe .| printLinesPipe
 
 --partial
 --readLines : Has [FileIO, Console] effects => App effects (Colist String)
