@@ -8,6 +8,10 @@
     # Repo got renamed...
     idris2-pkgs.inputs.idris-server.url = "gitlab:avidela/recombine";
 
+    # pipes.url = "github:QuentinDuval/IdrisPipes";
+    #pipes.url = "path:/home/nixos/repos/IdrisPipes";
+    #pipes.flake = false;
+
     nixpkgs.follows = "idris2-pkgs/nixpkgs";
   };
 
@@ -16,8 +20,18 @@
       let
         pkgs = import nixpkgs { inherit system; overlays = [ idris2-pkgs.overlay ]; };
         inherit (pkgs.idris2-pkgs._builders) idrisPackage devEnv;
-        mypkg = idrisPackage ./. { };
-        runTests = idrisPackage ./test { extraPkgs.mypkg = mypkg; };
+        #pipesPackage = idrisPackage pipes { };
+        mypkg = idrisPackage ./. {
+          extraPkgs = {
+            #inherit pipesPackage;
+          };
+        };
+        runTests = idrisPackage ./test {
+          extraPkgs = {
+            inherit mypkg;
+            #inherit pipesPackage;
+          };
+        };
       in
       {
         defaultPackage = mypkg;
