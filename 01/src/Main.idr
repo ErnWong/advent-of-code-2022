@@ -36,7 +36,7 @@ data Pipe :
 ||| Idris's type inference has a very hard time figuring this one out, so we explicitly type it
 ||| instead of using `pure` directly.
 lazyPure :
-    (Monad effects)
+    Monad effects
     => Inf (Pipe streamIn streamOut returnIn effects returnOut)
     -> effects (Inf (Pipe streamIn streamOut returnIn effects returnOut))
 lazyPure = pure
@@ -44,7 +44,7 @@ lazyPure = pure
 
 partial
 recurseToReturn :
-    (Monad effects)
+    Monad effects
     => Pipe streamIn streamOut returnIn effects a
     -> (mapReturn: a -> Pipe streamIn streamOut returnIn effects b)
     -> Pipe streamIn streamOut returnIn effects b
@@ -60,18 +60,18 @@ recurseToReturn pipe mapReturn = recurse pipe where
     recurse (Return value) = mapReturn value
 
 
-(Monad effects) => Functor (Pipe streamIn streamOut returnIn effects) where
+Monad effects => Functor (Pipe streamIn streamOut returnIn effects) where
     map function pipe = assert_total
         recurseToReturn pipe (\value => Return (function value))
 
 
-(Monad effects) => Applicative (Pipe streamIn streamOut returnIn effects) where
+Monad effects => Applicative (Pipe streamIn streamOut returnIn effects) where
     pure = Return
     pipeFunction <*> pipeArgument = assert_total
         recurseToReturn pipeFunction (\value => map value pipeArgument)
 
 
-(Monad effects) => Monad (Pipe streamIn streamOut returnIn effects) where
+Monad effects => Monad (Pipe streamIn streamOut returnIn effects) where
     effects >>= function = assert_total
         recurseToReturn effects (\value => function value)
 
@@ -84,14 +84,14 @@ infixr 9 .|
 ||| The pipe operator chains two pipes together.
 partial --todo totality
 (.|) :
-    (Monad effects)
+    Monad effects
     => Pipe streamIn streamMid returnIn effects returnMid
     -> Pipe streamMid streamOut returnMid effects returnOut
     -> Pipe streamIn streamOut returnIn effects returnOut
 (.|) = pull where
     mutual
         pull : 
-            (Monad effects')
+            Monad effects'
             => Pipe streamIn streamMid returnIn effects' returnMid
             -> Pipe streamMid streamOut returnMid effects' returnOut
             -> Pipe streamIn streamOut returnIn effects' returnOut
@@ -105,7 +105,7 @@ partial --todo totality
             = Return value
 
         push :
-            (Monad effects')
+            Monad effects'
             => Pipe streamIn streamMid returnIn effects' returnMid
             -> (Either returnMid streamMid -> Inf (Pipe streamMid streamOut returnMid effects' returnOut))
             -> Pipe streamIn streamOut returnIn effects' returnOut
@@ -128,7 +128,7 @@ Effect effects return = Pipe Void Void Void effects return
 
 
 partial
-runPipe : (Monad effects) => Effect effects return -> effects return
+runPipe : Monad effects => Effect effects return -> effects return
 runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
 runPipe (Yield _ value) = absurd value
 runPipe (Await _ ) = runPipe $ Await (either absurd absurd)
@@ -136,7 +136,7 @@ runPipe (Return value) = pure value
 
 
 partial
-mapEach : (Monad effects) => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
+mapEach : Monad effects => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
 mapEach function = Await $ \next => case next of
     Right value => do
         yield (function value)
@@ -179,7 +179,7 @@ printLines = Await $ \next => case next of
 
 partial
 splitByEmptyLine :
-    (Monad effects)
+    Monad effects
     => Pipe String Void () effects splitReturnOut
     -> Pipe String splitReturnOut () effects ()
 splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
@@ -204,7 +204,7 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
 
 
 partial
-parseNat : (Monad effects) => Pipe String Nat return effects return
+parseNat : Monad effects => Pipe String Nat return effects return
 parseNat = mapEach stringToNatOrZ
 
 
