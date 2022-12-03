@@ -144,6 +144,17 @@ mapEach function = Await $ \next => case next of
 
 
 partial
+foldPipe :
+    (Monad effects)
+    => (reducer: streamIn -> returnOut -> returnOut)
+    -> (initialValue: returnOut)
+    -> Pipe streamIn Void () effects returnOut
+foldPipe reducer accumulator = Await $ \next => case next of
+    Right value => foldPipe reducer (reducer value accumulator)
+    _ => Return accumulator
+
+
+partial
 readLines : Has [FileIO, Console] effects => Pipe Void String Void (App effects) ()
 readLines = do
     lift $ putStrLn "Reading next line..."
@@ -178,8 +189,8 @@ parseNat : (Monad effects) => Pipe String Nat return effects return
 parseNat = mapEach stringToNatOrZ
 
 
-sum : Pipe Nat Void () effects Nat
-sum = ?sumRhs
+sum : (Monad effects) => Pipe Nat Void () effects Nat
+sum = foldPipe (+) 0
 
 
 max : Pipe Nat Void () effects Nat
