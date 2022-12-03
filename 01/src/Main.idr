@@ -160,13 +160,8 @@ printLines = do
 
 
 partial
-pipeline : Has [FileIO, Console] effects => Effect (App effects) ()
-pipeline = readLines .| printLines
-
-
-partial
 app : Has[FileIO, Console] effects => App effects ()
-app = runPipe pipeline
+app = runPipe $ readLines .| printLines
 
 
 partial
