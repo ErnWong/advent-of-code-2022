@@ -168,12 +168,15 @@ readLines = do
 
 
 partial
-printLines : Has [Console] effects => Pipe String Void () (App effects) ()
-printLines = Await $ \next => case next of
+printEach :
+    (Show streamValue, Has [Console] effects)
+    => Pipe streamValue streamValue () (App effects) ()
+printEach = Await $ \next => case next of
     Right value => do
         lift $ putStrLn "Printing..."
-        lift $ putStrLn value
-        printLines
+        lift $ putStrLn (show value)
+        yield value
+        printEach
     _ => Return ()
 
 
@@ -227,7 +230,8 @@ partial
 app : Has [FileIO, Console] effects => App effects ()
 app = runPipe $
     readLines
-    .| splitByEmptyLine (parseNat .| sum)
+    .| splitByEmptyLine (parseNat .| printEach .| sum)
+    .| printEach
     .| max
     .| printReturnValue
 
