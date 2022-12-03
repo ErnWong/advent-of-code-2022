@@ -177,10 +177,30 @@ printLines = Await $ \next => case next of
     _ => Return ()
 
 
+partial
 splitByEmptyLine :
-    Pipe streamIn Void () effects splitReturnOut
-    -> Pipe streamIn splitReturnOut returnIn effects returnOut
-splitByEmptyLine = ?splitByEmptyLineRhs
+    (Monad effects)
+    => Pipe String Void () effects splitReturnOut
+    -> Pipe String splitReturnOut () effects ()
+splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
+    runInnerPipe :
+        (hasEnded: Bool)
+        -> Pipe String Void () effects splitReturnOut
+        -> Pipe String splitReturnOut () effects ()
+    runInnerPipe hasEnded (Do action) = do
+        nextPipe <- lift action
+        runInnerPipe hasEnded nextPipe
+    runInnerPipe _ (Yield _ value) = absurd value
+    runInnerPipe _ (Await continuation) =
+        Await $ \next => case next of
+            Right "" => runInnerPipe False (continuation (Left ()))
+            Right nonEmpty => runInnerPipe False (continuation (Right nonEmpty))
+            _ => runInnerPipe True (continuation (Left ()))
+    runInnerPipe hasEnded (Return value) = do
+        yield value
+        if hasEnded
+            then Return ()
+            else runInnerPipe False initialInnerPipeline
 
 
 partial
