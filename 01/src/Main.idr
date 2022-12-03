@@ -160,13 +160,12 @@ readLines = do
 
 partial
 printLines : Has [Console] effects => Pipe String Void () (App effects) ()
-printLines = do
-    Await $ \next => case next of
-        Right value => do
-            lift $ putStrLn "Printing..."
-            lift $ putStrLn value
-            printLines
-        _ => Return ()
+printLines = Await $ \next => case next of
+    Right value => do
+        lift $ putStrLn "Printing..."
+        lift $ putStrLn value
+        printLines
+    _ => Return ()
 
 
 splitByEmptyLine :
