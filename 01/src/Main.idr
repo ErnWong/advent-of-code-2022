@@ -160,7 +160,7 @@ printLines = do
 
 
 partial
-app : Has[FileIO, Console] effects => App effects ()
+app : Has [FileIO, Console] effects => App effects ()
 app = runPipe $ readLines .| printLines
 
 
