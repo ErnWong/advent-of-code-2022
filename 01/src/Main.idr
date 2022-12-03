@@ -159,9 +159,34 @@ printLines = do
         _ => Return ()
 
 
+splitByEmptyLine :
+    Pipe streamIn Void () effects splitReturnOut
+    -> Pipe streamIn splitReturnOut returnIn effects returnOut
+splitByEmptyLine = ?splitByEmptyLineRhs
+
+
+parseNat : Pipe String Nat returnIn effects returnOut
+parseNat = ?parseNatRhs
+
+
+sum : Pipe Nat Void () effects Nat
+sum = ?sumRhs
+
+
+max : Pipe Nat Void () effects Nat
+max = ?maxRhs
+
+printReturnValue : Has [Console] effects => Pipe Void Void return (App effects) ()
+printReturnValue = ?printReturnValueRhs
+
+
 partial
 app : Has [FileIO, Console] effects => App effects ()
-app = runPipe $ readLines .| printLines
+app = runPipe $
+    readLines
+    .| splitByEmptyLine (parseNat .| sum)
+    .| max
+    .| printReturnValue
 
 
 partial
