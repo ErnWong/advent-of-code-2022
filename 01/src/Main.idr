@@ -4,6 +4,7 @@ import Control.App
 import Control.App.Console
 import Control.App.FileIO
 import Control.Monad.Trans
+import Data.String
 import Data.Colist
 import System.File.Virtual
 
@@ -135,6 +136,15 @@ runPipe (Return value) = pure value
 
 
 partial
+mapEach : (Monad effects) => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
+mapEach function = Await $ \next => case next of
+    Right value => do
+        yield (function value)
+        mapEach function
+    Left value => Return value
+
+
+partial
 readLines : Has [FileIO, Console] effects => Pipe Void String Void (App effects) ()
 readLines = do
     lift $ putStrLn "Reading next line..."
@@ -165,8 +175,9 @@ splitByEmptyLine :
 splitByEmptyLine = ?splitByEmptyLineRhs
 
 
-parseNat : Pipe String Nat returnIn effects returnOut
-parseNat = ?parseNatRhs
+partial
+parseNat : (Monad effects) => Pipe String Nat return effects return
+parseNat = mapEach stringToNatOrZ
 
 
 sum : Pipe Nat Void () effects Nat
