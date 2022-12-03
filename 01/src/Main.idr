@@ -163,7 +163,7 @@ partial
     -> Pipe streamIn streamOut returnIn {history} effects returnMid
     -> ({0 newHistory: List streamIn} -> returnMid -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
     -> Pipe streamIn streamOut returnIn {history} effects returnOut
-effects >>= function = recurseToReturn effects (\newHistory, value => function value)
+effects >>= function = recurseToReturn effects (\mapHistory, value => function value)
 
 
 -- MonadTrans (Pipe streamIn streamOut returnIn) where
