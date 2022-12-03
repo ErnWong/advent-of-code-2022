@@ -216,7 +216,8 @@ max : Pipe Nat Void () effects Nat
 max = foldPipe maximum 0
 
 
-printReturnValue : Has [Console] effects => Pipe Void Void Nat (App effects) ()
+printReturnValue :
+    (Show return, Has [Console] effects) => Pipe Void Void return (App effects) ()
 printReturnValue = Await $ \next => case next of
     Right _ => printReturnValue
     Left value => lift $ putStrLn (show value)
