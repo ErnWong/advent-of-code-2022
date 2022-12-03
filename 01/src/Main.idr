@@ -13,6 +13,37 @@ import System.File.Virtual
 %default total
 
 
+--data Consumer : (history: List Nat) -> a -> Type where
+--    Return : (0 history: List Nat) -> a -> Consumer history a
+--    Consume : (0 history: List Nat) -> ((x: Nat) -> Consumer (x :: history) a) -> Consumer history a
+--
+--
+--Functor (Consumer history) where
+--    map f c = recurse history c where
+--        recurse : (0 history: List Nat) -> Consumer history a -> Consumer history b
+--        recurse history (Return history x) = Return history (f x)
+--        recurse history (Consume history next) = Consume history (\x => recurse (x :: history) (next x))
+--
+--
+--Applicative (Consumer history) where
+--    pure = Return history
+--    fn <*> arg = recurse history fn where
+--        recurse : (0 history: List Nat) -> Consumer history (a -> b) -> Consumer history b
+--        recurse history (Return history x) = map x arg
+--        recurse history (Consume history next) = Consume history (\x => recurse (x :: history) (next x))
+--
+--
+--myConsumer : (0 history: List Nat) -> Consumer history Nat
+--myConsumer history = Consume history $ \x => Return (x :: history) x
+--
+--otherConsumer : (0 history: List Nat) -> Consumer history Nat
+--otherConsumer history = Return history 3
+--
+--combinedConsumer : (0 history: List Nat) -> Consumer history Nat
+--combinedConsumer history = mybind (myConsumer history)  (\x, newHistory => otherConsumer newHistory) where
+--    mybind : Consumer history Nat ->  (Nat -> (newHistory: List Nat) -> Consumer newHistory Nat) -> Consumer history Nat
+
+
 -- Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 -- Extensions to IdrisPipes: We now index by history (erased at runtime) so we can reason
 -- about some properties of what a pipe outputs.
@@ -37,7 +68,7 @@ data Pipe :
             streamIn
             streamOut
             returnIn
-            {history = value :: history}
+            {history = (value :: history)}
             effects
             returnOut))
         -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
@@ -86,7 +117,7 @@ recurseToReturn pipe mapReturn = recurse {history = history} pipe where
     recurse {history} (Await onReturn onStream) = Await
         {history = history}
         (\end => recurse {history = history} (onReturn end))
-        (\streamNext => recurse {history = streamNext :: history} (onStream streamNext))
+        (\streamNext => recurse {history = (streamNext :: history)} (onStream streamNext))
     recurse {history} (Return value) = mapReturn history value
 
 
@@ -108,24 +139,42 @@ Monad effects
         --    mapReturnWithFunction value = Return {history = mapHistory} (function value)
 
 
-Monad effects => Applicative (Pipe streamIn streamOut returnIn {history} effects) where
-    pure = Return
-    pipeFunction <*> pipeArgument = assert_total
-        recurseToReturn pipeFunction mapReturnWithArgument where
-            mapReturnWithArgument:
-                (0 mapHistory: List streamIn)
-                -> x
-                -> Pipe streamIn streamOut returnIn {history = mapHistory} effects y
-            mapReturnWithArgument mapHistory value = ?todo--map ?valueTodo pipeArgument
+-- Monad effects => Applicative (Pipe streamIn streamOut returnIn {history=wat} effects) where
+--    pure = Return
+--    pipeFunction <*> pipeArgument = assert_total
+--        recurseToReturn pipeFunction mapReturnWithArgument where
+--            mapReturnWithArgument:
+--                (0 mapHistory: List streamIn)
+--                -> x
+--                -> Pipe streamIn streamOut returnIn {history = mapHistory} effects y
+--            mapReturnWithArgument mapHistory value = map ?valueTodo pipeArgument
 
 
---Monad effects => Monad (Pipe streamIn streamOut returnIn effects) where
---    effects >>= function = assert_total
---        recurseToReturn effects (\value => function value)
---
---
---MonadTrans (Pipe streamIn streamOut returnIn) where
---    lift effects = Do (effects >>= \value => lazyPure (Return value))
+-- Monad effects => Monad (Pipe streamIn streamOut returnIn effects) where
+--     effects >>= function = assert_total
+--         recurseToReturn effects (\value => function value)
+
+
+partial
+(>>=) :
+    Monad effects
+    => {0 streamIn: Type}
+    -> {0 history: List streamIn}
+    -> Pipe streamIn streamOut returnIn {history} effects returnMid
+    -> ({0 newHistory: List streamIn} -> returnMid -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
+    -> Pipe streamIn streamOut returnIn {history} effects returnOut
+effects >>= function = recurseToReturn effects (\newHistory, value => function value)
+
+
+-- MonadTrans (Pipe streamIn streamOut returnIn) where
+--     lift effects = Do (effects >>= \value => lazyPure (Return value))
+
+
+lift :
+    Monad effects
+    => effects returnOut
+    -> Pipe streamIn streamOut returnIn {history} effects returnOut
+lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
 --infixr 9 .|
