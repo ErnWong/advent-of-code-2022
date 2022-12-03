@@ -144,10 +144,8 @@ mapEach function = Await $ \next => case next of
     Left value => Return value
 
 
-partial
 foldPipe :
-    (Monad effects)
-    => (reducer: streamIn -> returnOut -> returnOut)
+    (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
     -> Pipe streamIn Void () effects returnOut
 foldPipe reducer accumulator = Await $ \next => case next of
@@ -190,11 +188,11 @@ parseNat : (Monad effects) => Pipe String Nat return effects return
 parseNat = mapEach stringToNatOrZ
 
 
-sum : (Monad effects) => Pipe Nat Void () effects Nat
+sum : Pipe Nat Void () effects Nat
 sum = foldPipe (+) 0
 
 
-max : (Monad effects) => Pipe Nat Void () effects Nat
+max : Pipe Nat Void () effects Nat
 max = foldPipe maximum 0
 
 
