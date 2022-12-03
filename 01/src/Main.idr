@@ -5,7 +5,6 @@ import Control.App.Console
 import Control.App.FileIO
 import Control.Monad.Trans
 import Data.String
-import Data.Colist
 import System.File.Virtual
 
 
