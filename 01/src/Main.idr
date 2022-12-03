@@ -18,34 +18,33 @@ import System.File.Virtual
 -- about some properties of what a pipe outputs.
 data Pipe :
     (streamIn, streamOut, returnIn: Type)
+    -> {0 history : List streamIn}
     -> (effects : Type -> Type)
-    -> (returnOut : Type)
-    -> (0 history : List streamIn)
-    -> Type where
+    -> (returnOut : Type) -> Type where
     Do :
         {0 history : List streamIn}
-        -> effects (Inf (Pipe streamIn streamOut returnIn effects returnOut history))
-        -> Pipe streamIn streamOut returnIn effects returnOut history
+        -> effects (Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
     Yield :
         {0 history : List streamIn}
-        -> Inf (Pipe streamIn streamOut returnIn effects returnOut history)
+        -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut)
         -> streamOut
-        -> Pipe streamIn streamOut returnIn effects returnOut history
+        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
     Await :
         {0 history : List streamIn}
-        -> (returnIn -> Inf (Pipe streamIn streamOut returnIn effects returnOut history))
+        -> (returnIn -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
         -> ((value: streamIn) -> Inf (Pipe
             streamIn
             streamOut
             returnIn
+            {history = value :: history}
             effects
-            returnOut
-            (value :: history)))
-        -> Pipe streamIn streamOut returnIn effects returnOut history
+            returnOut))
+        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
     Return :
         {0 history : List streamIn}
         -> returnOut
-        -> Pipe streamIn streamOut returnIn effects returnOut history
+        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
 
 
 ||| Idris's type inference has a very hard time figuring this one out, so we explicitly type it
@@ -53,9 +52,9 @@ data Pipe :
 lazyPure :
     Monad effects
     => {0 streamIn: Type}
-    -> (0 history: List streamIn)
-    -> Inf (Pipe streamIn streamOut returnIn effects returnOut history)
-    -> effects (Inf (Pipe streamIn streamOut returnIn effects returnOut history))
+    -> {0 history: List streamIn}
+    -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut)
+    -> effects (Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
 lazyPure = pure
 
 
@@ -63,36 +62,36 @@ partial
 recurseToReturn :
     Monad effects
     => {0 streamIn: Type}
-    -> (0 history: List streamIn)
-    -> Pipe streamIn streamOut returnIn effects a history
+    -> {0 history: List streamIn}
+    -> Pipe streamIn streamOut returnIn {history = history} effects a
     -> ((0 mapHistory: List streamIn)
         -> a
-        -> Pipe streamIn streamOut returnIn effects b mapHistory)
-    -> Pipe streamIn streamOut returnIn effects b history
-recurseToReturn pipe mapReturn = recurse history pipe where
+        -> Pipe streamIn streamOut returnIn {history = mapHistory} effects b)
+    -> Pipe streamIn streamOut returnIn {history = history} effects b
+recurseToReturn pipe mapReturn = recurse {history = history} pipe where
     recurse :
-        (0 history: List streamIn)
-        -> Pipe streamIn streamOut returnIn effects a history
-        -> Pipe streamIn streamOut returnIn effects b history
-    recurse history (Do {history = history} action) = Do
+        {0 history: List streamIn}
+        -> Pipe streamIn streamOut returnIn {history = history} effects a
+        -> Pipe streamIn streamOut returnIn {history = history} effects b
+    recurse {history} (Do {history = history} action) = Do
         {history = history}
         (do
             next <- action
             lazyPure
                 {streamIn = streamIn}
-                history
-                (recurse history next)
+                {history = history}
+                (recurse {history = history} next)
         )
-    recurse history (Yield next value) = Yield {history = history} (recurse history next) value
-    recurse history (Await onReturn onStream) = Await
+    recurse {history} (Yield next value) = Yield {history = history} (recurse {history = history} next) value
+    recurse {history} (Await onReturn onStream) = Await
         {history = history}
-        (\end => recurse history (onReturn end))
-        (\streamNext => recurse (streamNext :: history) (onStream streamNext))
-    recurse historyy (Return value) = mapReturn historyy value
+        (\end => recurse {history = history} (onReturn end))
+        (\streamNext => recurse {history = streamNext :: history} (onStream streamNext))
+    recurse {history} (Return value) = mapReturn history value
 
 
 Monad effects
-=> Functor (Pipe streamIn streamOut returnIn effects) where
+=> Functor (Pipe streamIn streamOut returnIn {history} effects) where
     map function pipe = assert_total
         recurseToReturn pipe mapReturnWithFunction where
             mapReturnWithFunction:
@@ -109,7 +108,7 @@ Monad effects
         --    mapReturnWithFunction value = Return {history = mapHistory} (function value)
 
 
-Monad effects => Applicative (Pipe streamIn streamOut returnIn effects) where
+Monad effects => Applicative (Pipe streamIn streamOut returnIn {history} effects) where
     pure = Return
     pipeFunction <*> pipeArgument = assert_total
         recurseToReturn pipeFunction mapReturnWithArgument where
@@ -117,7 +116,7 @@ Monad effects => Applicative (Pipe streamIn streamOut returnIn effects) where
                 (0 mapHistory: List streamIn)
                 -> x
                 -> Pipe streamIn streamOut returnIn {history = mapHistory} effects y
-            mapReturnWithArgument mapHistory value = map ?valueTodo pipeArgument
+            mapReturnWithArgument mapHistory value = ?todo--map ?valueTodo pipeArgument
 
 
 --Monad effects => Monad (Pipe streamIn streamOut returnIn effects) where
