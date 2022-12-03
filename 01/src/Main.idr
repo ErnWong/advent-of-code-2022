@@ -4,6 +4,7 @@ import Control.App
 import Control.App.Console
 import Control.App.FileIO
 import Control.Monad.Trans
+import Data.Nat
 import Data.String
 import System.File.Virtual
 
@@ -193,8 +194,9 @@ sum : (Monad effects) => Pipe Nat Void () effects Nat
 sum = foldPipe (+) 0
 
 
-max : Pipe Nat Void () effects Nat
-max = ?maxRhs
+max : (Monad effects) => Pipe Nat Void () effects Nat
+max = foldPipe maximum 0
+
 
 printReturnValue : Has [Console] effects => Pipe Void Void return (App effects) ()
 printReturnValue = ?printReturnValueRhs
