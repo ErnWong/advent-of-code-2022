@@ -13,37 +13,6 @@ import System.File.Virtual
 %default total
 
 
---data Consumer : (history: List Nat) -> a -> Type where
---    Return : (0 history: List Nat) -> a -> Consumer history a
---    Consume : (0 history: List Nat) -> ((x: Nat) -> Consumer (x :: history) a) -> Consumer history a
---
---
---Functor (Consumer history) where
---    map f c = recurse history c where
---        recurse : (0 history: List Nat) -> Consumer history a -> Consumer history b
---        recurse history (Return history x) = Return history (f x)
---        recurse history (Consume history next) = Consume history (\x => recurse (x :: history) (next x))
---
---
---Applicative (Consumer history) where
---    pure = Return history
---    fn <*> arg = recurse history fn where
---        recurse : (0 history: List Nat) -> Consumer history (a -> b) -> Consumer history b
---        recurse history (Return history x) = map x arg
---        recurse history (Consume history next) = Consume history (\x => recurse (x :: history) (next x))
---
---
---myConsumer : (0 history: List Nat) -> Consumer history Nat
---myConsumer history = Consume history $ \x => Return (x :: history) x
---
---otherConsumer : (0 history: List Nat) -> Consumer history Nat
---otherConsumer history = Return history 3
---
---combinedConsumer : (0 history: List Nat) -> Consumer history Nat
---combinedConsumer history = mybind (myConsumer history)  (\x, newHistory => otherConsumer newHistory) where
---    mybind : Consumer history Nat ->  (Nat -> (newHistory: List Nat) -> Consumer newHistory Nat) -> Consumer history Nat
-
-
 -- Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 -- Extensions to IdrisPipes: We now index by history (erased at runtime) so we can reason
 -- about some properties of what a pipe outputs.
@@ -131,45 +100,14 @@ Monad effects
                 -> Pipe streamIn streamOut returnIn {history = mapHistory} effects b
             mapReturnWithFunction mapHistory value = Return {history = mapHistory} (function value)
 
-        --recurseToReturn streamIn history pipe mapReturnWithFunction where
-        --    mapReturnWithFunction:
-        --        {auto 0 mapHistory: List streamIn}
-        --        -> a
-        --        -> Pipe streamIn streamOut returnIn {history = mapHistory} effects b
-        --    mapReturnWithFunction value = Return {history = mapHistory} (function value)
-
-
--- Monad effects => Applicative (Pipe streamIn streamOut returnIn {history=wat} effects) where
---    pure = Return
---    pipeFunction <*> pipeArgument = assert_total
---        recurseToReturn pipeFunction mapReturnWithArgument where
---            mapReturnWithArgument:
---                (0 mapHistory: List streamIn)
---                -> x
---                -> Pipe streamIn streamOut returnIn {history = mapHistory} effects y
---            mapReturnWithArgument mapHistory value = map ?valueTodo pipeArgument
-
-
--- Monad effects => Monad (Pipe streamIn streamOut returnIn effects) where
---     effects >>= function = assert_total
---         recurseToReturn effects (\value => function value)
-
 
 partial
 (>>=) :
     Monad effects
-    =>
-    --{0 streamIn: Type}
-    ---> {0 history: List streamIn}
-    Pipe streamIn streamOut returnIn {history} effects returnMid
-    -- -> (returnMid -> Pipe streamIn streamOut returnIn effects returnOut)
+    => Pipe streamIn streamOut returnIn {history} effects returnMid
     -> (returnMid -> {0 newHistory: List streamIn} -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
     -> Pipe streamIn streamOut returnIn {history} effects returnOut
 effects >>= function = recurseToReturn effects (\mapHistory, value => function value)
-
-
--- MonadTrans (Pipe streamIn streamOut returnIn) where
---     lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
 lift :
@@ -184,59 +122,19 @@ infixr 9 .|
 partial --todo totality
 (.|) :
     Monad effects
-    => --{0 streamIn: Type}
-    ---> {0 streamMid: Type}
-    ---> {0 historyIn: List streamIn}
-    ---> {0 historyMid: List streamMid}
-     Pipe streamIn streamMid returnIn {history = historyIn} effects returnMid
+    => Pipe streamIn streamMid returnIn {history = historyIn} effects returnMid
     -> Pipe streamMid streamOut returnMid {history = historyMid} effects returnOut
     -> Pipe streamIn streamOut returnIn {history = historyIn} effects returnOut
 (.|) = pull where
     mutual
         pull : 
             Monad effects'
-            =>
-            --{0 streamIn: Type}
-            ---> {0 streamMid: Type}
-             {0 pullHistoryIn: List streamIn}
+            => {0 pullHistoryIn: List streamIn}
             -> {0 pullHistoryMid: List streamMid}
             -> Pipe streamIn streamMid returnIn {history = pullHistoryIn} effects' returnMid
             -> Pipe streamMid streamOut returnMid {history = pullHistoryMid} effects' returnOut
             -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
         pull upstream (Do action)
-            --= Do
-            --(do
-            --    downstreamNext <- action
-            --    pull
-            --)
-            --= lift action >>= \next => pull ?todoupstream ?todopullnext--next
-
-            --= lift action >>= ?todopullnext where
-            --    -- Downstream doesn't affect pullHistoryIn at all, although pullHistoryMid may have changed
-            --    next :
-            --        Inf (Pipe streamMid streamOut returnMid {history = newPullHistoryMid} effects' returnOut)
-            --        -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
-            --    next nextPipe = pull {pullHistoryIn = pullHistoryIn} upstream nextPipe
-
-            --= recurseToReturn
-            --    (lift action)
-            --    -- Problem: mapHistory should stay the same as pullHistoryIn because upstream hasn't pulled, but
-            --    -- downstream may have pulled and therefore pullHistoryIn may have changed, but
-            --    -- we don't know what it changed to.
-            --    (\mapHistory, nextPipe => ?todopullrecurse
-            --        --pull
-            --        --    {pullHistoryIn = pullHistoryIn}
-            --        --    {pullHistoryMid = mapHistory}
-            --        --    upstream
-            --        --    nextPipe
-            --    )
-
-            --= Do (effects >>= \value => )
-            --= Do
-                --(do
-                --    nextDownstreamPipe <- action
-                --    lazyPure (pull upstream nextDownstreamPipe)
-                --)
             = Do (action >>= \nextDownstreamPipe => lazyPure (pull upstream nextDownstreamPipe))
         pull upstream (Yield downstreamNext value)
             = Yield (pull upstream downstreamNext) value
@@ -247,10 +145,7 @@ partial --todo totality
 
         push :
             Monad effects'
-            =>
-            --{0 streamIn: Type}
-            ---> {0 streamMid: Type}
-            {0 historyIn: List streamIn}
+            => {0 historyIn: List streamIn}
             -> {0 historyMid: List streamMid}
             -> Pipe streamIn streamMid returnIn {history = historyIn} effects' returnMid
             -> (returnMid -> Inf (Pipe streamMid streamOut returnMid {history = historyMid} effects' returnOut))
@@ -258,7 +153,6 @@ partial --todo totality
             -> Pipe streamIn streamOut returnIn {history = historyIn} effects' returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
             = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
-            --= lift action >>= \next => push ?todonext downstreamOnReturn downstreamOnStream
         push (Yield upstreamNext value) downstreamOnReturn downstreamOnStream
             = pull upstreamNext (downstreamOnStream value)
         push (Await upstreamOnReturn upstreamOnStream) downstreamOnReturn downstreamOnStream
@@ -283,17 +177,6 @@ runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
 runPipe (Yield _ value) = absurd value
 runPipe (Await _ _) = runPipe $ Await absurd (\x => absurd x)
 runPipe (Return value) = pure value 
-
-
-namespace DoNotationWithoutMonadsBigQuestionMark
-    data Lol a = Hahahaha a | Boooo
-    (>>=) : Lol a -> (a -> Lol b) -> Lol b
-
-    x : Lol String
-    x = do
-        test <- (Hahahaha 3)
-        test2 <- (Hahahaha (test * 2))
-        Boooo
 
 
 partial
@@ -359,9 +242,6 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
         -> Pipe String Void () effects splitReturnOut
         -> Pipe String splitReturnOut () effects ()
     runInnerPipe hasEnded (Do action) = Do (action >>= \nextInnerPipe => lazyPure (runInnerPipe hasEnded nextInnerPipe))
-    -- runInnerPipe hasEnded (Do action) = do
-    --     nextPipe <- lift action
-    --     runInnerPipe hasEnded ?nextPipe
     runInnerPipe _ (Yield _ value) = absurd value
     runInnerPipe _ (Await onReturn onStream) =
         Await
