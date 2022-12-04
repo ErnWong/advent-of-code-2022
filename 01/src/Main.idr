@@ -257,7 +257,8 @@ partial --todo totality
             -> ((value: streamMid) -> Inf (Pipe streamMid streamOut returnMid {history = value :: historyMid} effects' returnOut))
             -> Pipe streamIn streamOut returnIn {history = historyIn} effects' returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
-            = lift action >>= \next => push ?todonext downstreamOnReturn downstreamOnStream
+            = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
+            --= lift action >>= \next => push ?todonext downstreamOnReturn downstreamOnStream
         push (Yield upstreamNext value) downstreamOnReturn downstreamOnStream
             = pull upstreamNext (downstreamOnStream value)
         push (Await upstreamOnReturn upstreamOnStream) downstreamOnReturn downstreamOnStream
@@ -357,9 +358,10 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
         (hasEnded: Bool)
         -> Pipe String Void () effects splitReturnOut
         -> Pipe String splitReturnOut () effects ()
-    runInnerPipe hasEnded (Do action) = do
-        nextPipe <- lift action
-        runInnerPipe hasEnded ?nextPipe
+    runInnerPipe hasEnded (Do action) = Do (action >>= \nextInnerPipe => lazyPure (runInnerPipe hasEnded nextInnerPipe))
+    -- runInnerPipe hasEnded (Do action) = do
+    --     nextPipe <- lift action
+    --     runInnerPipe hasEnded ?nextPipe
     runInnerPipe _ (Yield _ value) = absurd value
     runInnerPipe _ (Await onReturn onStream) =
         Await
