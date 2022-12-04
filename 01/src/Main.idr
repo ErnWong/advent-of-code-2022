@@ -22,70 +22,52 @@ data Pipe :
     -> (effects : Type -> Type)
     -> (returnOut : Type) -> Type where
     Do :
-        {0 history : List streamIn}
-        -> effects (Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
-        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
+        effects (Inf (Pipe streamIn streamOut returnIn {history} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {history} effects returnOut
     Yield :
-        {0 history : List streamIn}
-        -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut)
+        Inf (Pipe streamIn streamOut returnIn {history} effects returnOut)
         -> streamOut
-        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
+        -> Pipe streamIn streamOut returnIn {history} effects returnOut
     Await :
-        {0 history : List streamIn}
-        -> (returnIn -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
-        -> ((value: streamIn) -> Inf (Pipe
-            streamIn
-            streamOut
-            returnIn
-            {history = (value :: history)}
-            effects
-            returnOut))
-        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
+        (returnIn -> Inf (Pipe streamIn streamOut returnIn {history} effects returnOut))
+        -> ((value: streamIn)
+            -> Inf (Pipe streamIn streamOut returnIn {history = (value :: history)} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {history} effects returnOut
     Return :
-        {0 history : List streamIn}
-        -> returnOut
-        -> Pipe streamIn streamOut returnIn {history = history} effects returnOut
+        returnOut -> Pipe streamIn streamOut returnIn {history} effects returnOut
 
 
 ||| Idris's type inference has a very hard time figuring this one out, so we explicitly type it
 ||| instead of using `pure` directly.
 lazyPure :
     Monad effects
-    => {0 streamIn: Type}
-    -> {0 history: List streamIn}
-    -> Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut)
-    -> effects (Inf (Pipe streamIn streamOut returnIn {history = history} effects returnOut))
+    => Inf (Pipe streamIn streamOut returnIn {history} effects returnOut)
+    -> effects (Inf (Pipe streamIn streamOut returnIn {history} effects returnOut))
 lazyPure = pure
 
 
 partial
 recurseToReturn :
     Monad effects
-    => {0 streamIn: Type}
-    -> {0 history: List streamIn}
-    -> Pipe streamIn streamOut returnIn {history = history} effects a
+    => Pipe streamIn streamOut returnIn {history = initialHistory} effects a
     -> ((0 mapHistory: List streamIn)
         -> a
         -> Pipe streamIn streamOut returnIn {history = mapHistory} effects b)
-    -> Pipe streamIn streamOut returnIn {history = history} effects b
-recurseToReturn pipe mapReturn = recurse {history = history} pipe where
+    -> Pipe streamIn streamOut returnIn {history = initialHistory} effects b
+recurseToReturn pipe mapReturn = recurse {history = initialHistory} pipe where
     recurse :
-        {0 history: List streamIn}
-        -> Pipe streamIn streamOut returnIn {history = history} effects a
-        -> Pipe streamIn streamOut returnIn {history = history} effects b
-    recurse {history} (Do {history = history} action) = Do
-        {history = history}
+        Pipe streamIn streamOut returnIn {history} effects a
+        -> Pipe streamIn streamOut returnIn {history} effects b
+    recurse {history} (Do {history} action) = Do
+        {history}
         (do
             next <- action
-            lazyPure
-                {streamIn = streamIn}
-                {history = history}
-                (recurse {history = history} next)
+            lazyPure {streamIn} {history} (recurse {history} next)
         )
-    recurse {history} (Yield next value) = Yield {history = history} (recurse {history = history} next) value
+    recurse {history} (Yield next value) = Yield {history} (recurse {history} next) value
     recurse {history} (Await onReturn onStream) = Await
-        {history = history}
-        (\end => recurse {history = history} (onReturn end))
+        {history}
+        (\end => recurse {history} (onReturn end))
         (\streamNext => recurse {history = (streamNext :: history)} (onStream streamNext))
     recurse {history} (Return value) = mapReturn history value
 
@@ -145,12 +127,14 @@ partial --todo totality
 
         push :
             Monad effects'
-            => {0 historyIn: List streamIn}
-            -> {0 historyMid: List streamMid}
-            -> Pipe streamIn streamMid returnIn {history = historyIn} effects' returnMid
-            -> (returnMid -> Inf (Pipe streamMid streamOut returnMid {history = historyMid} effects' returnOut))
-            -> ((value: streamMid) -> Inf (Pipe streamMid streamOut returnMid {history = value :: historyMid} effects' returnOut))
-            -> Pipe streamIn streamOut returnIn {history = historyIn} effects' returnOut
+            => {0 pushHistoryIn: List streamIn}
+            -> {0 pushHistoryMid: List streamMid}
+            -> Pipe streamIn streamMid returnIn {history = pushHistoryIn} effects' returnMid
+            -> (returnMid
+                -> Inf (Pipe streamMid streamOut returnMid {history = pushHistoryMid} effects' returnOut))
+            -> ((value: streamMid)
+                -> Inf (Pipe streamMid streamOut returnMid {history = value :: pushHistoryMid} effects' returnOut))
+            -> Pipe streamIn streamOut returnIn {history = pushHistoryIn} effects' returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
             = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
         push (Yield upstreamNext value) downstreamOnReturn downstreamOnStream
