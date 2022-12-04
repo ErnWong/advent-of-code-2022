@@ -209,12 +209,35 @@ partial --todo totality
             --    downstreamNext <- action
             --    pull
             --)
-            = lift action >>= \next => pull ?todoupstream ?todopullnext--next
-            --= lift action >>= next where
+            --= lift action >>= \next => pull ?todoupstream ?todopullnext--next
+
+            --= lift action >>= ?todopullnext where
+            --    -- Downstream doesn't affect pullHistoryIn at all, although pullHistoryMid may have changed
             --    next :
-            --        Inf (Pipe streamMid streamOut returnMid {history = pullHistoryMid} effects' returnOut)
+            --        Inf (Pipe streamMid streamOut returnMid {history = newPullHistoryMid} effects' returnOut)
             --        -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
-            --    next nextPipe = pull {pullHistoryIn = pullHistoryIn} upstream ?nextPipee
+            --    next nextPipe = pull {pullHistoryIn = pullHistoryIn} upstream nextPipe
+
+            --= recurseToReturn
+            --    (lift action)
+            --    -- Problem: mapHistory should stay the same as pullHistoryIn because upstream hasn't pulled, but
+            --    -- downstream may have pulled and therefore pullHistoryIn may have changed, but
+            --    -- we don't know what it changed to.
+            --    (\mapHistory, nextPipe => ?todopullrecurse
+            --        --pull
+            --        --    {pullHistoryIn = pullHistoryIn}
+            --        --    {pullHistoryMid = mapHistory}
+            --        --    upstream
+            --        --    nextPipe
+            --    )
+
+            --= Do (effects >>= \value => )
+            --= Do
+                --(do
+                --    nextDownstreamPipe <- action
+                --    lazyPure (pull upstream nextDownstreamPipe)
+                --)
+            = Do (action >>= \nextDownstreamPipe => lazyPure (pull upstream nextDownstreamPipe))
         pull upstream (Yield downstreamNext value)
             = Yield (pull upstream downstreamNext) value
         pull upstream (Await downstreamOnReturn downstreamOnStream)
