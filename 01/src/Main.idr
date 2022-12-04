@@ -1,8 +1,8 @@
 module Main
 
---import Control.App
---import Control.App.Console
---import Control.App.FileIO
+import Control.App
+import Control.App.Console
+import Control.App.FileIO
 import Control.Monad.Trans
 import Data.Nat
 import Data.String
@@ -158,10 +158,12 @@ Monad effects
 partial
 (>>=) :
     Monad effects
-    => {0 streamIn: Type}
-    -> {0 history: List streamIn}
-    -> Pipe streamIn streamOut returnIn {history} effects returnMid
-    -> ({0 newHistory: List streamIn} -> returnMid -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
+    =>
+    --{0 streamIn: Type}
+    ---> {0 history: List streamIn}
+    Pipe streamIn streamOut returnIn {history} effects returnMid
+    -- -> (returnMid -> Pipe streamIn streamOut returnIn effects returnOut)
+    -> (returnMid -> {0 newHistory: List streamIn} -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
     -> Pipe streamIn streamOut returnIn {history} effects returnOut
 effects >>= function = recurseToReturn effects (\mapHistory, value => function value)
 
@@ -177,164 +179,211 @@ lift :
 lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
---infixr 9 .|
---||| The pipe operator chains two pipes together.
---partial --todo totality
---(.|) :
---    Monad effects
---    => Pipe streamIn streamMid returnIn effects returnMid
---    -> Pipe streamMid streamOut returnMid effects returnOut
---    -> Pipe streamIn streamOut returnIn effects returnOut
---(.|) = pull where
---    mutual
---        pull : 
---            Monad effects'
---            => Pipe streamIn streamMid returnIn effects' returnMid
---            -> Pipe streamMid streamOut returnMid effects' returnOut
---            -> Pipe streamIn streamOut returnIn effects' returnOut
---        pull upstream (Do action)
---            = lift action >>= \next => pull upstream next
---        pull upstream (Yield downstreamNext value)
---            = Yield (pull upstream downstreamNext) value
---        pull upstream (Await downstreamContinuation)
---            = push upstream downstreamContinuation
---        pull upstream (Return value)
---            = Return value
---
---        push :
---            Monad effects'
---            => Pipe streamIn streamMid returnIn effects' returnMid
---            -> (Either returnMid streamMid -> Inf (Pipe streamMid streamOut returnMid effects' returnOut))
---            -> Pipe streamIn streamOut returnIn effects' returnOut
---        push (Do action) downstream
---            = lift action >>= \next => push next downstream
---        push (Yield upstreamNext value) downstream
---            = pull upstreamNext (downstream (Right value))
---        push (Await upstreamContinuation) downstream
---            = Await (\value => push (upstreamContinuation value) downstream)
---        push (Return value) downstream
---            = pull (Return value) (downstream (Left value))
---
---
---yield : streamOut -> Pipe streamIn streamOut returnIn effects ()
---yield value = Yield (Return ()) value -- We set Return () as the initial continuation, which can then be built upon monadically
---
---
---Effect : (effects: Type -> Type) -> (return: Type) -> Type
---Effect effects return = Pipe Void Void Void effects return
---
---
---partial
---runPipe : Monad effects => Effect effects return -> effects return
---runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
---runPipe (Yield _ value) = absurd value
---runPipe (Await _ ) = runPipe $ Await (either absurd absurd)
---runPipe (Return value) = pure value 
---
---
---partial
---mapEach : Monad effects => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
---mapEach function = Await $ \next => case next of
---    Right value => do
---        yield (function value)
---        mapEach function
---    Left value => Return value
---
---
---foldPipe :
---    (reducer: streamIn -> returnOut -> returnOut)
---    -> (initialValue: returnOut)
---    -> Pipe streamIn Void () effects returnOut
---foldPipe reducer accumulator = Await $ \next => case next of
---    Right value => foldPipe reducer (reducer value accumulator)
---    _ => Return accumulator
---
---
---partial
---readLines : Has [FileIO, Console] effects => Pipe Void String Void (App effects) ()
---readLines = do
---    lift $ putStrLn "Reading next line..."
---    -- TODO: Does this skip the last line?
---    line <- lift getLine
---    eof <- lift $ fEOF stdin
---    if eof
---        then Return ()
---        else do
---            yield line
---            readLines
---
---
---partial
---printEach :
---    (Show streamValue, Has [Console] effects)
---    => Pipe streamValue streamValue () (App effects) ()
---printEach = Await $ \next => case next of
---    Right value => do
---        lift $ putStrLn "Printing..."
---        lift $ putStrLn (show value)
---        yield value
---        printEach
---    _ => Return ()
---
---
---partial
---splitByEmptyLine :
---    Monad effects
---    => Pipe String Void () effects splitReturnOut
---    -> Pipe String splitReturnOut () effects ()
---splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
---    runInnerPipe :
---        (hasEnded: Bool)
---        -> Pipe String Void () effects splitReturnOut
---        -> Pipe String splitReturnOut () effects ()
---    runInnerPipe hasEnded (Do action) = do
---        nextPipe <- lift action
---        runInnerPipe hasEnded nextPipe
---    runInnerPipe _ (Yield _ value) = absurd value
---    runInnerPipe _ (Await continuation) =
---        Await $ \next => case next of
---            Right "" => runInnerPipe False (continuation (Left ()))
---            Right nonEmpty => runInnerPipe False (continuation (Right nonEmpty))
---            _ => runInnerPipe True (continuation (Left ()))
---    runInnerPipe hasEnded (Return value) = do
---        yield value
---        if hasEnded
---            then Return ()
---            else runInnerPipe False initialInnerPipeline
---
---
---partial
---parseNat : Monad effects => Pipe String Nat return effects return
---parseNat = mapEach stringToNatOrZ
---
---
---sum : Pipe Nat Void () effects Nat
---sum = foldPipe (+) 0
---
---
---max : Pipe Nat Void () effects Nat
---max = foldPipe maximum 0
---
---
---printReturnValue :
---    (Show return, Has [Console] effects) => Pipe Void Void return (App effects) ()
---printReturnValue = Await $ \next => case next of
---    Right _ => printReturnValue
---    Left value => lift $ putStrLn (show value)
---
---
---partial
---app : Has [FileIO, Console] effects => App effects ()
---app = runPipe $
---    readLines
---    .| splitByEmptyLine (parseNat .| printEach .| sum)
---    .| printEach
---    .| max
---    .| printReturnValue
---
---
---partial
---main : IO ()
---main = run $ handle app
---    (\() => putStr "Ok")
---    (\error : IOError => putStr "Error")
+infixr 9 .|
+||| The pipe operator chains two pipes together.
+partial --todo totality
+(.|) :
+    Monad effects
+    => --{0 streamIn: Type}
+    ---> {0 streamMid: Type}
+    ---> {0 historyIn: List streamIn}
+    ---> {0 historyMid: List streamMid}
+     Pipe streamIn streamMid returnIn {history = historyIn} effects returnMid
+    -> Pipe streamMid streamOut returnMid {history = historyMid} effects returnOut
+    -> Pipe streamIn streamOut returnIn {history = historyIn} effects returnOut
+(.|) = pull where
+    mutual
+        pull : 
+            Monad effects'
+            =>
+            --{0 streamIn: Type}
+            ---> {0 streamMid: Type}
+             {0 pullHistoryIn: List streamIn}
+            -> {0 pullHistoryMid: List streamMid}
+            -> Pipe streamIn streamMid returnIn {history = pullHistoryIn} effects' returnMid
+            -> Pipe streamMid streamOut returnMid {history = pullHistoryMid} effects' returnOut
+            -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
+        pull upstream (Do action)
+            --= Do
+            --(do
+            --    downstreamNext <- action
+            --    pull
+            --)
+            = lift action >>= \next => pull ?todoupstream ?todopullnext--next
+            --= lift action >>= next where
+            --    next :
+            --        Inf (Pipe streamMid streamOut returnMid {history = pullHistoryMid} effects' returnOut)
+            --        -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
+            --    next nextPipe = pull {pullHistoryIn = pullHistoryIn} upstream ?nextPipee
+        pull upstream (Yield downstreamNext value)
+            = Yield (pull upstream downstreamNext) value
+        pull upstream (Await downstreamOnReturn downstreamOnStream)
+            = push upstream downstreamOnReturn downstreamOnStream
+        pull upstream (Return value)
+            = Return value
+
+        push :
+            Monad effects'
+            => {0 streamIn: Type}
+            -> {0 streamMid: Type}
+            -> {0 historyIn: List streamIn}
+            -> {0 historyMid: List streamMid}
+            -> Pipe streamIn streamMid returnIn {history = historyIn} effects' returnMid
+            -> (returnMid -> Inf (Pipe streamMid streamOut returnMid {history = historyMid} effects' returnOut))
+            -> ((value: streamMid) -> Inf (Pipe streamMid streamOut returnMid {history = value :: historyMid} effects' returnOut))
+            -> Pipe streamIn streamOut returnIn {history = historyIn} effects' returnOut
+        push (Do action) downstreamOnReturn downstreamOnStream
+            = lift action >>= \next => push ?todonext downstreamOnReturn downstreamOnStream
+        push (Yield upstreamNext value) downstreamOnReturn downstreamOnStream
+            = pull upstreamNext (downstreamOnStream value)
+        push (Await upstreamOnReturn upstreamOnStream) downstreamOnReturn downstreamOnStream
+            = Await
+                (\value => push (upstreamOnReturn value) downstreamOnReturn downstreamOnStream)
+                (\value => push (upstreamOnStream value) downstreamOnReturn downstreamOnStream)
+        push (Return value) downstreamOnReturn downstreamOnStream
+            = pull (Return value) (downstreamOnReturn value)
+
+
+yield : streamOut -> Pipe streamIn streamOut returnIn effects ()
+yield value = Yield (Return ()) value -- We set Return () as the initial continuation, which can then be built upon monadically
+
+
+Effect : (effects: Type -> Type) -> (return: Type) -> Type
+Effect effects return = Pipe Void Void Void {history = []} effects return
+
+
+partial
+runPipe : Monad effects => Effect effects return -> effects return
+runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
+runPipe (Yield _ value) = absurd value
+runPipe (Await _ _) = runPipe $ Await absurd (\x => absurd x)
+runPipe (Return value) = pure value 
+
+
+namespace DoNotationWithoutMonadsBigQuestionMark
+    data Lol a = Hahahaha a | Boooo
+    (>>=) : Lol a -> (a -> Lol b) -> Lol b
+
+    x : Lol String
+    x = do
+        test <- (Hahahaha 3)
+        test2 <- (Hahahaha (test * 2))
+        Boooo
+
+
+partial
+mapEach : Monad effects => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
+mapEach function = Await  
+    (\returnValue => Return returnValue)
+    (\streamValue => do
+        _ <- yield (function streamValue)
+        mapEach function
+    )
+
+
+foldPipe :
+    (reducer: streamIn -> returnOut -> returnOut)
+    -> (initialValue: returnOut)
+    -> Pipe streamIn Void () effects returnOut
+foldPipe reducer accumulator = Await
+    (\_ => Return accumulator)
+    (\streamValue => foldPipe reducer (reducer streamValue accumulator))
+
+
+
+partial
+readLines : Has [FileIO, Console] effects => Pipe Void String Void {history = []} (App effects) ()
+readLines = recurse where
+    recurse : Pipe Void String Void (App effects) ()
+    recurse = do
+        _ <- lift $ putStrLn "Reading next line..."
+        -- TODO: Does this skip the last line?
+        line <- lift getLine
+        eof <- lift $ fEOF stdin
+        if eof
+            then Return ()
+            else do
+                _ <- yield line
+                recurse
+
+
+partial
+printEach :
+    (Show streamValue, Has [Console] effects)
+    => Pipe streamValue streamValue () {history = []} (App effects) ()
+printEach = recurse where
+    recurse : Pipe streamValue streamValue () (App effects) ()
+    recurse = Await
+        (\_ => Return ())
+        (\streamValue => do
+            _ <- lift $ putStrLn "Printing..."
+            _ <- lift $ putStrLn (show streamValue)
+            _ <- yield streamValue
+            recurse
+        )
+
+
+partial
+splitByEmptyLine :
+    Monad effects
+    => Pipe String Void () effects splitReturnOut
+    -> Pipe String splitReturnOut () {history = []} effects ()
+splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
+    runInnerPipe :
+        (hasEnded: Bool)
+        -> Pipe String Void () effects splitReturnOut
+        -> Pipe String splitReturnOut () effects ()
+    runInnerPipe hasEnded (Do action) = do
+        nextPipe <- lift action
+        runInnerPipe hasEnded ?nextPipe
+    runInnerPipe _ (Yield _ value) = absurd value
+    runInnerPipe _ (Await onReturn onStream) =
+        Await
+            (\_ => runInnerPipe True (onReturn ()))
+            (\streamValue => case streamValue of
+                "" => runInnerPipe False (onReturn ())
+                nonEmpty => runInnerPipe False (onStream nonEmpty))
+    runInnerPipe hasEnded (Return value) = do
+        _ <- yield value
+        if hasEnded
+            then Return ()
+            else runInnerPipe False initialInnerPipeline
+
+
+partial
+parseNat : Monad effects => Pipe String Nat return {history = []} effects return
+parseNat = mapEach stringToNatOrZ
+
+
+sum : Pipe Nat Void () {history = []} effects Nat
+sum = foldPipe (+) 0
+
+
+max : Pipe Nat Void () {history = []} effects Nat
+max = foldPipe maximum 0
+
+
+printReturnValue :
+    (Show return, Has [Console] effects) => Pipe Void Void return {history = []} (App effects) ()
+printReturnValue = recurse where
+    recurse : Pipe Void Void return (App effects) ()
+    recurse = Await
+        (\returnValue => lift $ putStrLn (show returnValue))
+        (\_ => recurse)
+
+
+partial
+app : Has [FileIO, Console] effects => App effects ()
+app = runPipe $
+    readLines
+    .| splitByEmptyLine (parseNat .| printEach .| sum)
+    .| printEach
+    .| max
+    .| printReturnValue
+
+
+partial
+main : IO ()
+main = run $ handle app
+    (\() => putStr "Ok")
+    (\error : IOError => putStr "Error")
