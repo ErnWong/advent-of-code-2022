@@ -247,9 +247,10 @@ partial --todo totality
 
         push :
             Monad effects'
-            => {0 streamIn: Type}
-            -> {0 streamMid: Type}
-            -> {0 historyIn: List streamIn}
+            =>
+            --{0 streamIn: Type}
+            ---> {0 streamMid: Type}
+            {0 historyIn: List streamIn}
             -> {0 historyMid: List streamMid}
             -> Pipe streamIn streamMid returnIn {history = historyIn} effects' returnMid
             -> (returnMid -> Inf (Pipe streamMid streamOut returnMid {history = historyMid} effects' returnOut))
