@@ -3,6 +3,7 @@ module Main
 import Control.App
 import Control.App.Console
 import Control.App.FileIO
+import Control.Monad.Identity
 import Control.Monad.Trans
 import Data.Nat
 import Data.String
@@ -99,6 +100,24 @@ lift :
 lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
+-- Recurse to Do and map it from Identity to effect
+partial
+fromPurePipe :
+    Monad effects
+    => Pipe streamIn streamOut returnIn Identity returnOut
+    -> Pipe streamIn streamOut returnIn effects returnOut
+fromPurePipe pipe = recurse pipe where
+    recurse :
+        Inf (Pipe streamIn streamOut returnIn Identity returnOut)
+        -> Pipe streamIn streamOut returnIn effects returnOut
+    recurse (Do action) = Do (pure (runIdentity action) >>= \next => lazyPure $ recurse next)
+    recurse (Yield next value) = Yield (recurse next) value
+    recurse (Await onReturn onStream) = Await
+        (\value => recurse $ onReturn value)
+        (\value => recurse $ onStream value)
+    recurse (Return value) = Return value
+
+
 infixr 9 .|
 ||| The pipe operator chains two pipes together.
 partial --todo totality
@@ -160,7 +179,23 @@ runPipe : Monad effects => Effect effects return -> effects return
 runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
 runPipe (Yield _ value) = absurd value
 runPipe (Await _ _) = runPipe $ Await absurd (\x => absurd x)
-runPipe (Return value) = pure value 
+runPipe (Return value) = pure value
+
+
+partial
+fromList : Monad effects => List streamOut -> Pipe Void streamOut Void {history = []} effects ()
+fromList = recurse where
+    recurse : List streamOut -> Pipe Void streamOut Void effects ()
+    recurse [] = Return ()
+    recurse (x :: xs) = yield x >>= (\() => recurse xs)
+
+
+partial
+runPurePipeWithList :
+    Pipe streamIn Void () Identity returnOut
+    -> List streamIn
+    -> returnOut
+runPurePipeWithList pipe list = runIdentity $ runPipe (fromList list .| pipe)
 
 
 partial
@@ -173,14 +208,98 @@ mapEach function = Await
     )
 
 
+--partial
+--ProofThatFoldPipeIsJustLikeFold : Type
+--ProofThatFoldPipeIsJustLikeFold =
+--    -- Our pipe...
+--    {streamIn: Type}
+--    -> {returnOut: Type}
+--    -> (pipe: Pipe streamIn Void () {history = []} Identity returnOut)
+--    -- ...behaves just like folding over a list using the folllowing reducer...
+--    -> (reducer: returnOut -> streamIn -> returnOut)
+--    -- ...when starting with an accumulator value of...
+--    -> (initialValue: returnOut)
+--
+--    -- By that, we mean that, GIVEN any possible input list...
+--    -> (inputList: List streamIn)
+--
+--    -- THEN we can show propositional equality between folding on that list
+--    -- and the return value of running the pipe...
+--    -> (runPurePipeWithList pipe inputList = foldr reducer initialValue inputList)
+--
+--
+--theproof : ProofThatFoldPipeIsJustLikeFold
+--theproof pipe reducer initialValue [] = ?todoproofnilRefl
+--theproof pipe reducer initialValue [x] = ?todoproofsingleRefl
+--theproof pipe reducer initialValue (x :: xs) = theproof pipe reducer (theproof pipe reducer initialValue xs) [x]
+
+
+--data FoldPipe : (history: List streamIn) -> Pipe streamIn Void () {history} Identity returnOut -> Type where
+--    Initial : FoldPipe [] (Await
+--        (\_ => Return initialValue)
+--        (\streamValue =>)
+--    )
+--    Await :
+--        (returnIn -> Inf (FoldPipe history (Return ())))
+--        -> ((value: streamIn)
+--            -> Inf (Pipe streamIn streamOut returnIn {history = (value :: history)} effects returnOut))
+--        -> FoldPipe (Await onReturn onStream)
+--    Return :
+--        (value: returnOut) -> FoldPipe history (Return ())
+
+
+--equalityIsTransitive : a = b -> b = c -> a = c
+--equalityIsTransitive Refl Refl = Refl
+
+
+partial --todo
 foldPipe :
     (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
-    -> Pipe streamIn Void () effects returnOut
-foldPipe reducer accumulator = Await
-    (\_ => Return accumulator)
-    (\streamValue => foldPipe reducer (reducer streamValue accumulator))
+    -> (
+        pipe:
+            Pipe streamIn Void () {history = []} Identity returnOut
+        --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
+        ** (inputList: List streamIn)
+            -> (runPurePipeWithList pipe inputList = foldr reducer initialValue inputList)
+        )
+foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase ** ?todoOverallProof) where
+    proofBaseCase : initialValue = foldr reducer initialValue []
+    proofBaseCase = Refl
 
+    recurse :
+        (0 history: List streamIn)
+        -> (accumulator: returnOut)
+        -> (accumulator = foldr reducer initialValue history)
+        -> (
+            --pipe:
+                Pipe streamIn Void () {history} Identity returnOut
+            --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
+            --** (inputList: List streamIn)
+            --    -> (runPurePipeWithList pipe ((reverse history) ++ inputList) = foldr reducer initialValue inputList)
+            --** accumulator = foldr reducer initialValue (newestInput :: previousInputs)
+            )
+    recurse history accumulator proofThatAccumulatorEqualsFoldr =
+        Await
+            (\_ => Return accumulator)
+            onStream
+        where
+            onStream :
+                (value: streamIn)
+                -> Inf (Pipe streamIn Void () {history = (value :: history)} Identity returnOut)
+            onStream value = recurse (value :: history) (reducer value accumulator) previousAccumulatorAppliedOnceEqualsNextFoldr
+                where
+                    previousFoldrAppliedOnceEqualsNextFoldr :
+                        reducer value (foldr reducer initialValue history)
+                        = foldr reducer initialValue (value :: history)
+                    previousFoldrAppliedOnceEqualsNextFoldr = Refl
+
+                    previousAccumulatorAppliedOnceEqualsNextFoldr :
+                        reducer value accumulator
+                        = foldr reducer initialValue (value :: history)
+                    previousAccumulatorAppliedOnceEqualsNextFoldr =
+                        rewrite proofThatAccumulatorEqualsFoldr
+                        in previousFoldrAppliedOnceEqualsNextFoldr
 
 
 partial
@@ -245,12 +364,14 @@ parseNat : Monad effects => Pipe String Nat return {history = []} effects return
 parseNat = mapEach stringToNatOrZ
 
 
-sum : Pipe Nat Void () {history = []} effects Nat
-sum = foldPipe (+) 0
+partial
+sum : Monad effects => Pipe Nat Void () {history = []} effects Nat
+sum = fromPurePipe $ fst $ foldPipe (+) 0
 
 
-max : Pipe Nat Void () {history = []} effects Nat
-max = foldPipe maximum 0
+partial
+max : Monad effects => Pipe Nat Void () {history = []} effects Nat
+max = fromPurePipe $ fst $ foldPipe maximum 0
 
 
 printReturnValue :
