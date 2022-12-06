@@ -158,18 +158,18 @@ infixr 9 .|
 partial --todo totality
 (.|) :
     Monad effects
-    => Pipe streamIn streamMid returnIn {history = historyIn} effects returnMid
-    -> Pipe streamMid streamOut returnMid {history = historyMid} effects returnOut
-    -> Pipe streamIn streamOut returnIn {history = historyIn} effects returnOut
+    => Pipe streamIn streamMid returnIn {history = historyIn, invariant = invariantA} effects returnMid
+    -> Pipe streamMid streamOut returnMid {history = historyMid, invariant = invariantB} effects returnOut
+    -> Pipe streamIn streamOut returnIn {history = historyIn, invariant = NoInvariant} effects returnOut
 (.|) = pull where
     mutual
         pull : 
             Monad effects'
             => {0 pullHistoryIn: List streamIn}
             -> {0 pullHistoryMid: List streamMid}
-            -> Pipe streamIn streamMid returnIn {history = pullHistoryIn} effects' returnMid
-            -> Pipe streamMid streamOut returnMid {history = pullHistoryMid} effects' returnOut
-            -> Pipe streamIn streamOut returnIn {history = pullHistoryIn} effects' returnOut
+            -> Pipe streamIn streamMid returnIn {history = pullHistoryIn, invariant = invariantA} effects' returnMid
+            -> Pipe streamMid streamOut returnMid {history = pullHistoryMid, invariant = invariantB} effects' returnOut
+            -> Pipe streamIn streamOut returnIn {history = pullHistoryIn, invariant = NoInvariant} effects' returnOut
         pull upstream (Do action)
             = Do (action >>= \nextDownstreamPipe => lazyPure (pull upstream nextDownstreamPipe))
         pull upstream (Yield downstreamNext value)
@@ -183,12 +183,12 @@ partial --todo totality
             Monad effects'
             => {0 pushHistoryIn: List streamIn}
             -> {0 pushHistoryMid: List streamMid}
-            -> Pipe streamIn streamMid returnIn {history = pushHistoryIn} effects' returnMid
+            -> Pipe streamIn streamMid returnIn {history = pushHistoryIn, invariant = invariantA} effects' returnMid
             -> (returnMid
-                -> Inf (Pipe streamMid streamOut returnMid {history = pushHistoryMid} effects' returnOut))
+                -> Inf (Pipe streamMid streamOut returnMid {history = pushHistoryMid, invariant = invariantB} effects' returnOut))
             -> ((value: streamMid)
-                -> Inf (Pipe streamMid streamOut returnMid {history = value :: pushHistoryMid} effects' returnOut))
-            -> Pipe streamIn streamOut returnIn {history = pushHistoryIn} effects' returnOut
+                -> Inf (Pipe streamMid streamOut returnMid {history = value :: pushHistoryMid, invariant = invariantB} effects' returnOut))
+            -> Pipe streamIn streamOut returnIn {history = pushHistoryIn, invariant = NoInvariant} effects' returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
             = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
         push (Yield upstreamNext value) downstreamOnReturn downstreamOnStream
