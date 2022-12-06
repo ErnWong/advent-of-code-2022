@@ -39,10 +39,10 @@ NoInvariant _ _ = ()
 data Pipe :
     (streamIn, streamOut, returnIn: Type)
     -> {0 history : List streamIn}
-    -> {default NoInvariant 0 invariant : List streamIn -> returnOut -> Type}
     ---> {default NoInvariant 0 invariant : PipeInvariant streamIn returnOut}
     -> (effects : Type -> Type)
     -> (returnOut : Type)
+    -> {default NoInvariant 0 invariant : List streamIn -> returnOut -> Type}
     -> Type where
     Do :
         effects (Inf (Pipe streamIn streamOut returnIn {history, invariant} effects returnOut))
