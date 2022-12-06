@@ -5,6 +5,7 @@ import Control.App.Console
 import Control.App.FileIO
 import Control.Monad.Identity
 import Control.Monad.Trans
+import Data.DPair
 import Data.Nat
 import Data.String
 import System.File.Virtual
@@ -123,6 +124,9 @@ partial --todo totality
     => Pipe streamIn streamMid returnIn {history = historyIn, invariant = invariantA} effects returnMid
     -> Pipe streamMid streamOut returnMid {history = historyMid, invariant = invariantB} effects returnOut
     -> Pipe streamIn streamOut returnIn {history = historyIn, invariant = NoInvariant} effects returnOut
+    --newInvariant = \finalHistory, returnValue =>
+    --  Exists (List streamMid) \historyMid => 
+    --      (invariantB historyMid returnValue, streamInvariantA finalHistory historyMid)
 (.|) = pull where
     mutual
         pull : 
@@ -167,16 +171,32 @@ yield : streamOut -> Pipe streamIn streamOut returnIn effects ()
 yield value = Yield (Return ()) value -- We set Return () as the initial continuation, which can then be built upon monadically
 
 
-Effect : (effects: Type -> Type) -> (return: Type) -> Type
-Effect effects return = Pipe Void Void Void {history = []} effects return
+Effect :
+    (effects: Type -> Type) -> (return: Type)
+    -> {default NoInvariant 0 invariant: List Void -> return -> Type} -> Type
+Effect effects return = Pipe Void Void Void {history = [], invariant} effects return
 
 
 partial
-runPipe : Monad effects => Effect effects return -> effects return
-runPipe (Do action) = action >>= \nextPipe => runPipe nextPipe
-runPipe (Yield _ value) = absurd value
-runPipe (Await _ _) = runPipe $ Await absurd (\x => absurd x)
-runPipe (Return value) = pure value
+runPipeWithInvariant :
+    Monad effects
+    => Effect effects return {invariant}
+    -> effects (Subset return (\returnValue => invariant [] returnValue))
+runPipeWithInvariant (Do action) = action >>= \nextPipe => runPipeWithInvariant nextPipe
+runPipeWithInvariant (Yield _ value) = absurd value
+runPipeWithInvariant (Await _ _) = runPipeWithInvariant $ Await {invariant} absurd (\x => absurd x)
+runPipeWithInvariant (Return value {invariantProof}) = pure (Element value invariantProof)
+--runPipeWithInvariant (Return value {invariantProof}) = thePure (value ** invariantProof) where
+    --thePure : (value: return ** invariant [] value) -> effects (value: return ** invariant [] value)
+    --thePure = pure
+
+
+partial
+runPipe :
+    Monad effects
+    => Effect effects return {invariant}
+    -> effects return
+runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 
 partial
@@ -187,12 +207,26 @@ fromList = recurse where
     recurse (x :: xs) = yield x >>= (\() => recurse xs)
 
 
+--pipeWithListInput :
+--    Monad effects
+--    => (input: List streamIn)
+--    -> Pipe streamIn Void () {history = [], invariant = innerInvariant} effects returnOut
+--    -> Effect effects returnOut {invariant = \finalHistory, returnValue => innerInvariant input returnValue}
+--pipeWithListInput input pipe = todoInvariantPreservingPipeComposition (fromList input) pipe where
+--    todoInvariantPreservingPipeComposition :
+--        Monad effects
+--        => Pipe Void streamIn Void {history = [], invariant = NoInvariant} effects ()
+--        -> Pipe streamIn Void () {history = [], invariant = innerInvariant} effects returnOut
+--        -> Effect effects returnOut {invariant = \finalHistory, returnValue => innerInvariant input returnValue}
+--    todoInvariantPreservingPipeComposition = ?todoComposeRhs
+
+
 partial
 runPurePipeWithList :
-    Pipe streamIn Void () Identity returnOut
-    -> List streamIn
-    -> returnOut
-runPurePipeWithList pipe list = runIdentity $ runPipe (fromList list .| pipe)
+    Pipe streamIn Void () {history = [], invariant} Identity returnOut
+    -> (input: List streamIn)
+    -> Subset returnOut (\returnValue => invariant input returnValue)
+runPurePipeWithList pipe list = ?todoRunPurePipeWithList --runIdentity $ runPipeWithInvariant (todoPipeCompose (fromList list) pipe) where
 
 
 partial
