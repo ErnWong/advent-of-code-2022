@@ -79,16 +79,15 @@ lazyPure = pure
 partial
 recurseToReturn :
     Monad effects
-    => Pipe streamIn streamOut returnIn {history = initialHistory, invariant = invariantA} effects returnOutA
+    => Pipe streamIn streamOut returnIn {history = initialHistory, invariant = NoInvariant} effects returnOutA
     -> ((0 mapHistory: List streamIn)
         -> returnOutA
-        -> (0 invariantA: List streamIn -> returnOut -> Type)
-        -> Pipe streamIn streamOut returnIn {history = mapHistory, invariant = invariantB} effects returnOutB)
-    -> Pipe streamIn streamOut returnIn {history = initialHistory, invariant = invariantB} effects returnOutB
+        -> Pipe streamIn streamOut returnIn {history = mapHistory, invariant = NoInvariant} effects returnOutB)
+    -> Pipe streamIn streamOut returnIn {history = initialHistory, invariant = NoInvariant} effects returnOutB
 recurseToReturn pipe mapReturn = recurse {history = initialHistory} pipe where
     recurse :
-        Pipe streamIn streamOut returnIn {history, invariant = invariantA} effects returnOutA
-        -> Pipe streamIn streamOut returnIn {history, invariant = invariantA} effects returnOutB
+        Pipe streamIn streamOut returnIn {history, invariant = NoInvariant} effects returnOutA
+        -> Pipe streamIn streamOut returnIn {history, invariant = NoInvariant} effects returnOutB
     recurse {history} (Do {history} action) = Do
         {history}
         (do
@@ -123,16 +122,16 @@ recurseToReturn pipe mapReturn = recurse {history = initialHistory} pipe where
 partial
 (>>=) :
     Monad effects
-    => Pipe streamIn streamOut returnIn {history} effects returnMid
-    -> (returnMid -> {0 newHistory: List streamIn} -> Pipe streamIn streamOut returnIn {history = newHistory} effects returnOut)
-    -> Pipe streamIn streamOut returnIn {history} effects returnOut
+    => Pipe streamIn streamOut returnIn {history, invariant = NoInvariant} effects returnMid
+    -> (returnMid -> {0 newHistory: List streamIn} -> Pipe streamIn streamOut returnIn {history = newHistory, invariant = NoInvariant} effects returnOut)
+    -> Pipe streamIn streamOut returnIn {history, invariant = NoInvariant} effects returnOut
 effects >>= function = recurseToReturn effects (\mapHistory, value => function value)
 
 
 lift :
     Monad effects
     => effects returnOut
-    -> Pipe streamIn streamOut returnIn {history, invariant} effects returnOut
+    -> Pipe streamIn streamOut returnIn {history, invariant = NoInvariant} effects returnOut
 lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
