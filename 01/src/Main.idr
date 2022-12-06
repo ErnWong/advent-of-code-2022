@@ -62,7 +62,7 @@ data Pipe :
         --    NoInvariant => returnOut
         --    Invariant invariant => DPair returnOut (invariant history)--(value: returnOut, invariant history value)
         --)
-        returnOut
+        (returnValue: returnOut)
         -> {auto 0 invariantProof : invariant history returnValue}
         -> Pipe streamIn streamOut returnIn {history, invariant} effects returnOut
 
