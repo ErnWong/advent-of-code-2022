@@ -291,17 +291,8 @@ partial --todo
 foldPipe :
     (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
-    -> (
-        --pipe:
-            Pipe streamIn Void () {history = [], invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
-            --Pipe streamIn Void () {history = [], invariant = NoInvariant} Identity returnOut
-        --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
-        --** (inputList: List streamIn)
-        --    -> (runPurePipeWithList ?pipe inputList = foldr reducer initialValue inputList)
-        )
-foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase
-        --** ?todoOverallProof
-    ) where
+    -> Pipe streamIn Void () {history = [], invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
+foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
     proofBaseCase : initialValue = foldr reducer initialValue []
     proofBaseCase = Refl
 
@@ -309,15 +300,7 @@ foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase
         (0 history: List streamIn)
         -> (accumulator: returnOut)
         -> (accumulator = foldr reducer initialValue history)
-        -> (
-            --pipe:
-                Pipe streamIn Void () {history, invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
-                --Pipe streamIn Void () {history, invariant = NoInvariant} Identity returnOut
-            --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
-            --** (inputList: List streamIn)
-            --    -> (runPurePipeWithList pipe ((reverse history) ++ inputList) = foldr reducer initialValue inputList)
-            --** accumulator = foldr reducer initialValue (newestInput :: previousInputs)
-            )
+        -> Pipe streamIn Void () {history, invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
     recurse history accumulator proofThatAccumulatorEqualsFoldr =
         Await
             (\_ => Return accumulator)
@@ -404,13 +387,17 @@ parseNat = mapEach stringToNatOrZ
 
 
 partial
-sum : Monad effects => Pipe Nat Void () {history = []} effects Nat
---sum = fromPurePipe $ fst $ foldPipe (+) 0
+sum : Monad effects => Pipe Nat Void () {history = [],
+            invariant = \finalHistory, finalReturn => finalReturn = foldr (+) 0 finalHistory}
+        effects Nat
+sum = fromPurePipe $ foldPipe (+) 0
 
 
 partial
-max : Monad effects => Pipe Nat Void () {history = []} effects Nat
---max = fromPurePipe $ fst $ foldPipe maximum 0
+max : Monad effects => Pipe Nat Void () {history = [],
+        invariant = \finalHistory, finalReturn => finalReturn = foldr Data.Nat.maximum 0 finalHistory}
+    effects Nat
+max = fromPurePipe $ foldPipe maximum 0
 
 
 printReturnValue :
