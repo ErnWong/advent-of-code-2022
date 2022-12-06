@@ -17,21 +17,6 @@ import System.File.Virtual
 NoInvariant : List streamIn -> returnOut -> Type
 NoInvariant _ _ = ()
 
--- data PipeInvariant streamIn returnOut
---     = NoInvariant
---     | Invariant (List streamIn -> returnOut -> Type)
--- 
--- 
--- data Funny : Bool -> Type where
---     MkFunny : {default False 0 yes:Bool} -> (if yes then (Nat, Nat) else Nat) -> Funny yes
--- 
--- 
--- ||| If the pipe has an invariant, then make sure that variant is fulfilled when the pipe returns.
--- ||| Otherwise, the pipe is free to return any value of type `returnOut`.
--- pipeReturnType : (returnOut: Type) -> PipeInvariant streamIn returnOut -> Type
--- pipeReturnType returnOut (Invariant invariant) = DPair returnOut (invariant [])
--- pipeReturnType returnOut NoInvariant = returnOut
-
 
 ||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 ||| Extensions to IdrisPipes: We now index by history (erased at runtime) and an invariant
@@ -39,7 +24,6 @@ NoInvariant _ _ = ()
 data Pipe :
     (streamIn, streamOut, returnIn: Type)
     -> {0 history : List streamIn}
-    ---> {default NoInvariant 0 invariant : PipeInvariant streamIn returnOut}
     -> (effects : Type -> Type)
     -> (returnOut : Type)
     -> {default NoInvariant 0 invariant : List streamIn -> returnOut -> Type}
@@ -57,11 +41,6 @@ data Pipe :
             -> Inf (Pipe streamIn streamOut returnIn {history = (value :: history), invariant} effects returnOut))
         -> Pipe streamIn streamOut returnIn {history, invariant} effects returnOut
     Return :
-        --pipeReturnType returnOut invariant
-        --(case invariant of
-        --    NoInvariant => returnOut
-        --    Invariant invariant => DPair returnOut (invariant history)--(value: returnOut, invariant history value)
-        --)
         (returnValue: returnOut)
         -> {auto 0 invariantProof : invariant history returnValue}
         -> Pipe streamIn streamOut returnIn {history, invariant} effects returnOut
@@ -101,23 +80,6 @@ recurseToReturn pipe mapReturn = recurse {history = initialHistory} pipe where
         (\streamNext => recurse {history = (streamNext :: history)} (onStream streamNext))
     recurse {history} (Return value) = mapReturn history value
 
-
---Monad effects
---=> Functor (Pipe streamIn streamOut returnIn {history} effects) where
---    map function pipe = assert_total
---        recurseToReturn pipe mapReturnWithFunction where
---            mapReturnWithFunction:
---                (0 mapHistory: List streamIn)
---                -> a
---                -> (0 invariantA: PipeInvariant streamIn a)
---                -> Pipe streamIn streamOut returnIn {history = mapHistory, invariant = invariantB} effects b
---            mapReturnWithFunction mapHistory value invariantA
---                = Return {history = mapHistory, invariant = mapInvariant invariantA} (function value) where
---                    mapInvariant:
---                        PipeInvariant streamIn a
---                        -> PipeInvariant streamIn b
---                    mapInvariant NoInvariant = NoInvariant
---                    mapInvariant (Invariant invariant) = Invariant (\history, returnValueA => )
 
 partial
 (>>=) :
@@ -241,50 +203,6 @@ mapEach function = Await
         _ <- yield (function streamValue)
         mapEach function
     )
-
-
---partial
---ProofThatFoldPipeIsJustLikeFold : Type
---ProofThatFoldPipeIsJustLikeFold =
---    -- Our pipe...
---    {streamIn: Type}
---    -> {returnOut: Type}
---    -> (pipe: Pipe streamIn Void () {history = []} Identity returnOut)
---    -- ...behaves just like folding over a list using the folllowing reducer...
---    -> (reducer: returnOut -> streamIn -> returnOut)
---    -- ...when starting with an accumulator value of...
---    -> (initialValue: returnOut)
---
---    -- By that, we mean that, GIVEN any possible input list...
---    -> (inputList: List streamIn)
---
---    -- THEN we can show propositional equality between folding on that list
---    -- and the return value of running the pipe...
---    -> (runPurePipeWithList pipe inputList = foldr reducer initialValue inputList)
---
---
---theproof : ProofThatFoldPipeIsJustLikeFold
---theproof pipe reducer initialValue [] = ?todoproofnilRefl
---theproof pipe reducer initialValue [x] = ?todoproofsingleRefl
---theproof pipe reducer initialValue (x :: xs) = theproof pipe reducer (theproof pipe reducer initialValue xs) [x]
-
-
---data FoldPipe : (history: List streamIn) -> Pipe streamIn Void () {history} Identity returnOut -> Type where
---    Initial : FoldPipe [] (Await
---        (\_ => Return initialValue)
---        (\streamValue =>)
---    )
---    Await :
---        (returnIn -> Inf (FoldPipe history (Return ())))
---        -> ((value: streamIn)
---            -> Inf (Pipe streamIn streamOut returnIn {history = (value :: history)} effects returnOut))
---        -> FoldPipe (Await onReturn onStream)
---    Return :
---        (value: returnOut) -> FoldPipe history (Return ())
-
-
---equalityIsTransitive : a = b -> b = c -> a = c
---equalityIsTransitive Refl Refl = Refl
 
 
 partial --todo
