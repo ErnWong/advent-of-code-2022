@@ -292,13 +292,16 @@ foldPipe :
     (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
     -> (
-        pipe:
-            Pipe streamIn Void () {history = []} Identity returnOut
+        --pipe:
+            Pipe streamIn Void () {history = [], invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
+            --Pipe streamIn Void () {history = [], invariant = NoInvariant} Identity returnOut
         --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
-        ** (inputList: List streamIn)
-            -> (runPurePipeWithList pipe inputList = foldr reducer initialValue inputList)
+        --** (inputList: List streamIn)
+        --    -> (runPurePipeWithList ?pipe inputList = foldr reducer initialValue inputList)
         )
-foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase ** ?todoOverallProof) where
+foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase
+        --** ?todoOverallProof
+    ) where
     proofBaseCase : initialValue = foldr reducer initialValue []
     proofBaseCase = Refl
 
@@ -308,7 +311,8 @@ foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase ** ?todoO
         -> (accumulator = foldr reducer initialValue history)
         -> (
             --pipe:
-                Pipe streamIn Void () {history} Identity returnOut
+                Pipe streamIn Void () {history, invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut
+                --Pipe streamIn Void () {history, invariant = NoInvariant} Identity returnOut
             --** ProofThatFoldPipeIsJustLikeFold pipe reducer initialValue
             --** (inputList: List streamIn)
             --    -> (runPurePipeWithList pipe ((reverse history) ++ inputList) = foldr reducer initialValue inputList)
@@ -321,7 +325,7 @@ foldPipe reducer initialValue = (recurse [] initialValue proofBaseCase ** ?todoO
         where
             onStream :
                 (value: streamIn)
-                -> Inf (Pipe streamIn Void () {history = (value :: history)} Identity returnOut)
+                -> Inf (Pipe streamIn Void () {history = (value :: history), invariant = \finalHistory, finalReturn => finalReturn = foldr reducer initialValue finalHistory} Identity returnOut)
             onStream value = recurse (value :: history) (reducer value accumulator) previousAccumulatorAppliedOnceEqualsNextFoldr
                 where
                     previousFoldrAppliedOnceEqualsNextFoldr :
@@ -401,12 +405,12 @@ parseNat = mapEach stringToNatOrZ
 
 partial
 sum : Monad effects => Pipe Nat Void () {history = []} effects Nat
-sum = fromPurePipe $ fst $ foldPipe (+) 0
+--sum = fromPurePipe $ fst $ foldPipe (+) 0
 
 
 partial
 max : Monad effects => Pipe Nat Void () {history = []} effects Nat
-max = fromPurePipe $ fst $ foldPipe maximum 0
+--max = fromPurePipe $ fst $ foldPipe maximum 0
 
 
 printReturnValue :
