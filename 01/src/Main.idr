@@ -59,7 +59,7 @@ lazyPure :
 lazyPure = pure
 
 
-partial
+covering
 recurseToReturn :
     Monad effects
     => Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, returnInvariant = NoInvariant} effects returnOutA
@@ -86,7 +86,7 @@ recurseToReturn pipe mapReturn = recurse {historyIn = initialHistoryIn, historyO
     recurse {historyIn, historyOut} (Return value) = mapReturn historyIn historyOut value
 
 
-partial
+covering
 (>>=) :
     Monad effects
     => Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnMid
@@ -103,7 +103,7 @@ lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
 -- Recurse to Do and map it from Identity to effect
-partial
+covering
 fromPurePipe :
     Monad effects
     => Pipe streamIn streamOut returnIn {historyIn = overallHistoryIn, historyOut = overallHistoryOut, returnInvariant = overallReturnInvariant} Identity returnOut
@@ -122,7 +122,7 @@ fromPurePipe pipe = recurse pipe where
 
 infixr 9 .|
 ||| The pipe operator chains two pipes together.
-partial --todo totality
+covering --todo totality
 (.|) :
     Monad effects
     => Pipe streamIn streamMid returnIn {historyIn, historyOut = historyMid, returnInvariant = returnInvariantA} effects returnMid
@@ -181,7 +181,7 @@ Effect :
 Effect effects return = Pipe Void Void Void {historyIn = [], historyOut = [], returnInvariant} effects return
 
 
-partial
+covering
 runPipeWithInvariant :
     Monad effects
     => Effect effects return {returnInvariant}
@@ -195,7 +195,7 @@ runPipeWithInvariant (Return value {returnInvariantProof}) = pure (Element value
     --thePure = pure
 
 
-partial
+covering
 runPipe :
     Monad effects
     => Effect effects return {returnInvariant}
@@ -203,7 +203,7 @@ runPipe :
 runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 
-partial
+covering
 fromList : Monad effects => List streamOut -> Pipe Void streamOut Void {historyIn = []} effects ()
 fromList = recurse where
     recurse : List streamOut -> Pipe Void streamOut Void effects ()
@@ -225,7 +225,7 @@ fromList = recurse where
 --    todoInvariantPreservingPipeComposition = ?todoComposeRhs
 
 
-partial
+covering
 runPurePipeWithList :
     Pipe streamIn Void () {historyIn = [], returnInvariant} Identity returnOut
     -> (input: List streamIn)
@@ -233,7 +233,7 @@ runPurePipeWithList :
 runPurePipeWithList pipe list = ?todoRunPurePipeWithList --runIdentity $ runPipeWithInvariant (todoPipeCompose (fromList list) pipe) where
 
 
-partial
+covering
 mapEach : Monad effects => (streamIn -> streamOut) -> Pipe streamIn streamOut return effects return
 mapEach function = Await  
     (\returnValue => Return returnValue)
@@ -243,7 +243,7 @@ mapEach function = Await
     )
 
 
-partial --todo
+covering --todo
 foldPipe :
     (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
@@ -280,7 +280,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
                         in previousFoldrAppliedOnceEqualsNextFoldr
 
 
-partial
+covering
 readLines : Has [FileIO, Console] effects => Pipe Void String Void {historyIn = []} (App effects) ()
 readLines = recurse where
     recurse : Pipe Void String Void (App effects) ()
@@ -296,7 +296,7 @@ readLines = recurse where
                 recurse
 
 
-partial
+covering
 printEach :
     (Show streamValue, Has [Console] effects)
     => Pipe streamValue streamValue () {historyIn = []} (App effects) ()
@@ -312,7 +312,7 @@ printEach = recurse where
         )
 
 
-partial
+covering
 splitByEmptyLine :
     Monad effects
     => Pipe String Void () {historyIn = [], returnInvariant = NoInvariant} effects splitReturnOut
@@ -337,19 +337,19 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
             else runInnerPipe False initialInnerPipeline
 
 
-partial
+covering
 parseNat : Monad effects => Pipe String Nat return {historyIn = []} effects return
 parseNat = mapEach stringToNatOrZ
 
 
-partial
+covering
 sum : Monad effects => Pipe Nat Void () {historyIn = [], historyOut = [],
             returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr (+) 0 finalHistoryIn}
         effects Nat
 sum = fromPurePipe $ foldPipe (+) 0
 
 
-partial
+covering
 max : Monad effects => Pipe Nat Void () {historyIn = [], historyOut = [],
         returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn}
     effects Nat
@@ -365,7 +365,7 @@ printReturnValue = recurse where
         (\_ => recurse)
 
 
-partial
+covering
 app : Has [FileIO, Console] effects => App effects ()
 app = runPipe $
     readLines
@@ -375,7 +375,7 @@ app = runPipe $
     .| printReturnValue
 
 
-partial
+covering
 main : IO ()
 main = run $ handle app
     (\() => putStr "Ok")
