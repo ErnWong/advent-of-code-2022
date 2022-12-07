@@ -15,7 +15,7 @@ import System.File.Virtual
 %default total
 
 
-NoInvariant : List streamIn -> returnOut -> Type
+NoInvariant : List streamIn -> out -> Type
 NoInvariant _ _ = ()
 
 
@@ -28,24 +28,26 @@ data Pipe :
     -> {0 historyOut : List streamOut}
     -> (effects : Type -> Type)
     -> (returnOut : Type)
+    -> {default NoInvariant 0 streamInvariant : List streamIn -> List streamOut -> Type}
     -> {default NoInvariant 0 returnInvariant : List streamIn -> returnOut -> Type}
     -> Type where
     Do :
-        effects (Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut))
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut
+        effects (Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Yield :
         (value: streamOut)
-        -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut = (value :: historyOut), returnInvariant} effects returnOut)
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut
+        -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
+        -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut = (value :: historyOut), streamInvariant, returnInvariant} effects returnOut)
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Await :
-        (returnIn -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut))
+        (returnIn -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut))
         -> ((value: streamIn)
-            -> Inf (Pipe streamIn streamOut returnIn {historyIn = (value :: historyIn), historyOut, returnInvariant} effects returnOut))
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut
+            -> Inf (Pipe streamIn streamOut returnIn {historyIn = (value :: historyIn), historyOut, streamInvariant, returnInvariant} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Return :
         (returnValue: returnOut)
         -> {auto 0 returnInvariantProof : returnInvariant historyIn returnValue}
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
 
 
 ||| Idris's type inference has a very hard time figuring this one out, so we explicitly type it
