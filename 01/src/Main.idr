@@ -25,22 +25,15 @@ NoReturnInvariant : List streamIn -> List streamOut -> returnOut -> Type
 NoReturnInvariant _ _ _ = ()
 
 
-||| Whether a pipe is guaranteed to exhaust all of its inputs before returning,
-||| or whether a pipe might return earlier even when there's still input.
-data TerminationType = Exhaustive | NonExhaustive
-
-
 ||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 ||| Extensions to IdrisPipes: We now index by history (erased at runtime) and an invariant
 ||| so we can reason about some properties of what a pipe outputs.
 data Pipe :
     (streamIn, streamOut, returnIn: Type)
-    -> {0 isInputExhausted : Bool}
     -> {0 historyIn : List streamIn}
     -> {0 historyOut : List streamOut}
     -> (effects : Type -> Type)
     -> (returnOut : Type)
-    -> {default NonExhaustive 0 terminationType : TerminationType}
     -> {default NoStreamInvariant 0 streamInvariant : List streamIn -> List streamOut -> Type}
     -> {default NoReturnInvariant 0 returnInvariant : List streamIn -> List streamOut -> returnOut -> Type}
     -> Type where
@@ -53,68 +46,14 @@ data Pipe :
         -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut = (value :: historyOut), streamInvariant, returnInvariant} effects returnOut)
         -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Await :
-        (returnIn
-            -> Inf (Pipe
-                streamIn
-                streamOut
-                returnIn
-                {
-                    historyIn,
-                    historyOut,
-                    streamInvariant,
-                    returnInvariant
-                }
-                effects
-                returnOut
-            ))
+        (returnIn -> Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut))
         -> ((value: streamIn)
-            -> Inf (Pipe
-                streamIn
-                streamOut
-                returnIn
-                {
-                    historyIn = (value :: historyIn),
-                    historyOut,
-                    terminationType,
-                    streamInvariant,
-                    returnInvariant
-                }
-                effects
-                returnOut
-            ))
-        -> Pipe
-            streamIn
-            streamOut
-            returnIn
-            {
-                historyIn,
-                historyOut,
-                terminationType,
-                streamInvariant,
-                returnInvariant
-            }
-            effects
-            returnOut
+            -> Inf (Pipe streamIn streamOut returnIn {historyIn = (value :: historyIn), historyOut, streamInvariant, returnInvariant} effects returnOut))
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Return :
         (returnValue: returnOut)
         -> {auto 0 returnInvariantProof : returnInvariant historyIn historyOut returnValue}
-        -> Pipe
-            streamIn
-            (case terminationType of
-                Exhaustive => Void
-                NonExhaustive => streamIn
-            )
-            streamOut
-            returnIn
-            {
-                historyIn,
-                historyOut,
-                terminationType,
-                streamInvariant,
-                returnInvariant
-            }
-            effects
-            returnOut
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
 
 
 ||| Idris's type inference has a very hard time figuring this one out, so we explicitly type it
