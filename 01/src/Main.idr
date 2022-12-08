@@ -211,7 +211,11 @@ runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 covering
 fromList : (Monad effects, Eq streamOut) => (list: List streamOut) -> Pipe Void streamOut Void {historyIn = [], historyOut = [],
-    streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
+    streamInvariant = \currentHistoryIn, currentHistoryOut
+        => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
+    returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturnOut
+        => reverse finalHistoryOut = list
+    } effects ()
 fromList list = recurse list proofBaseCase where
     proofBaseCase : list = list
     proofBaseCase = Refl
@@ -220,8 +224,20 @@ fromList list = recurse list proofBaseCase where
         (remaining: List streamOut)
         -> (0 inductionHypothesis: (reverse historyOut) ++ remaining = list)
         -> Pipe Void streamOut Void
-            {historyOut, streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
-    recurse [] historyIsPrefix = Return ()
+            {historyOut,
+            streamInvariant = \currentHistoryIn, currentHistoryOut
+                => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
+            returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturnOut
+                => reverse finalHistoryOut = list
+            } effects ()
+
+    recurse [] historyIsPrefix = Return () {returnInvariantProof = hypothesisRearranged} where
+        0 inductionHypothesis : (reverse historyOut) ++ [] = list
+        inductionHypothesis = historyIsPrefix
+
+        0 hypothesisRearranged : reverse historyOut = list
+        hypothesisRearranged = rewrite reverseOntoSpec [] historyOut in inductionHypothesis
+
     recurse (x :: xs) historyIsPrefix =
         Yield x
             {streamInvariantProof = (xs ** inductionStep)}
