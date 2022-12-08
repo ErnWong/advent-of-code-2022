@@ -17,8 +17,12 @@ import System.File.Virtual
 %default total
 
 
-NoInvariant : List streamIn -> out -> Type
-NoInvariant _ _ = ()
+NoStreamInvariant : List streamIn -> List streamOut -> Type
+NoStreamInvariant _ _ = ()
+
+
+NoReturnInvariant : List streamIn -> List streamOut -> returnOut -> Type
+NoReturnInvariant _ _ _ = ()
 
 
 ||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
@@ -30,8 +34,8 @@ data Pipe :
     -> {0 historyOut : List streamOut}
     -> (effects : Type -> Type)
     -> (returnOut : Type)
-    -> {default NoInvariant 0 streamInvariant : List streamIn -> List streamOut -> Type}
-    -> {default NoInvariant 0 returnInvariant : List streamIn -> returnOut -> Type}
+    -> {default NoStreamInvariant 0 streamInvariant : List streamIn -> List streamOut -> Type}
+    -> {default NoReturnInvariant 0 returnInvariant : List streamIn -> List streamOut -> returnOut -> Type}
     -> Type where
     Do :
         effects (Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut))
@@ -48,7 +52,7 @@ data Pipe :
         -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
     Return :
         (returnValue: returnOut)
-        -> {auto 0 returnInvariantProof : returnInvariant historyIn returnValue}
+        -> {auto 0 returnInvariantProof : returnInvariant historyIn historyOut returnValue}
         -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut
 
 
@@ -64,16 +68,16 @@ lazyPure = pure
 covering
 recurseToReturn :
     Monad effects
-    => Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutA
+    => Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOutA
     -> ((0 mapHistoryIn: List streamIn)
         -> (0 mapHistoryOut: List streamOut)
         -> returnOutA
-        -> Pipe streamIn streamOut returnIn {historyIn = mapHistoryIn, historyOut = mapHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB)
-    -> Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB
+        -> Pipe streamIn streamOut returnIn {historyIn = mapHistoryIn, historyOut = mapHistoryOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOutB)
+    -> Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOutB
 recurseToReturn pipe mapReturn = recurse {historyIn = initialHistoryIn, historyOut = initialHistoryOut} pipe where
     recurse :
-        Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutA
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB
+        Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOutA
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOutB
     recurse {historyIn, historyOut} (Do {historyIn, historyOut} action) = Do
         {historyIn, historyOut}
         (do
@@ -91,16 +95,16 @@ recurseToReturn pipe mapReturn = recurse {historyIn = initialHistoryIn, historyO
 covering
 (>>=) :
     Monad effects
-    => Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnMid
-    -> (returnMid -> {0 newHistoryIn: List streamIn} -> {0 newHistoryOut: List streamOut} -> Pipe streamIn streamOut returnIn {historyIn = newHistoryIn, historyOut = newHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOut)
-    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOut
+    => Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnMid
+    -> (returnMid -> {0 newHistoryIn: List streamIn} -> {0 newHistoryOut: List streamOut} -> Pipe streamIn streamOut returnIn {historyIn = newHistoryIn, historyOut = newHistoryOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOut)
+    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoReturnInvariant} effects returnOut
 effects >>= function = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
 
 
 lift :
     Monad effects
     => effects returnOut
-    -> Pipe streamIn streamOut returnIn {historyIn, returnInvariant = NoInvariant} effects returnOut
+    -> Pipe streamIn streamOut returnIn {historyIn, returnInvariant = NoReturnInvariant} effects returnOut
 lift effects = Do (effects >>= \value => lazyPure (Return value))
 
 
@@ -112,8 +116,8 @@ fromPurePipe :
     -> Pipe streamIn streamOut returnIn {historyIn = overallHistoryIn, historyOut = overallHistoryOut, returnInvariant = overallReturnInvariant} effects returnOut
 fromPurePipe pipe = recurse pipe where
     recurse :
-        Inf (Pipe streamIn streamOut returnIn {historyIn = innerHistoryIn, returnInvariant = innerReturnInvariant} Identity returnOut)
-        -> Pipe streamIn streamOut returnIn {historyIn = innerHistoryIn, returnInvariant = innerReturnInvariant} effects returnOut
+        Inf (Pipe streamIn streamOut returnIn {historyIn = innerHistoryIn, historyOut = innerHistoryOut, returnInvariant = innerReturnInvariant} Identity returnOut)
+        -> Pipe streamIn streamOut returnIn {historyIn = innerHistoryIn, historyOut = innerHistoryOut, returnInvariant = innerReturnInvariant} effects returnOut
     recurse (Do action) = Do (pure (runIdentity action) >>= \next => lazyPure $ recurse next)
     recurse (Yield value next) = Yield value (recurse next)
     recurse (Await onReturn onStream) = Await
@@ -129,7 +133,7 @@ covering --todo totality
     Monad effects
     => Pipe streamIn streamMid returnIn {historyIn, historyOut = historyMid, returnInvariant = returnInvariantA} effects returnMid
     -> Pipe streamMid streamOut returnMid {historyIn = historyMid, historyOut, returnInvariant = returnInvariantB} effects returnOut
-    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnOut
+    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoReturnInvariant} effects returnOut
     --newInvariant = \finalHistoryIn, returnValue =>
     --  Exists (List streamMid) \historyMid => 
     --      (returnInvariantB historyMid returnValue, streamInvariantA finalHistoryIn historyMid)
@@ -141,7 +145,7 @@ covering --todo totality
             -> {0 pullHistoryMid: List streamMid}
             -> Pipe streamIn streamMid returnIn {historyIn = pullHistoryIn, historyOut = pullHistoryMid, returnInvariant = returnInvariantA} effects' returnMid
             -> Pipe streamMid streamOut returnMid {historyIn = pullHistoryMid, historyOut = pullHistoryOut, returnInvariant = returnInvariantB} effects' returnOut
-            -> Pipe streamIn streamOut returnIn {historyIn = pullHistoryIn, historyOut = pullHistoryOut, returnInvariant = NoInvariant} effects' returnOut
+            -> Pipe streamIn streamOut returnIn {historyIn = pullHistoryIn, historyOut = pullHistoryOut, returnInvariant = NoReturnInvariant} effects' returnOut
         pull upstream (Do action)
             = Do (action >>= \nextDownstreamPipe => lazyPure (pull upstream nextDownstreamPipe))
         pull upstream (Yield value downstreamNext)
@@ -160,7 +164,7 @@ covering --todo totality
                 -> Inf (Pipe streamMid streamOut returnMid {historyIn = pushHistoryMid, historyOut = pushHistoryOut, returnInvariant = returnInvariantB} effects' returnOut))
             -> ((value: streamMid)
                 -> Inf (Pipe streamMid streamOut returnMid {historyIn = value :: pushHistoryMid, historyOut = pushHistoryOut, returnInvariant = returnInvariantB} effects' returnOut))
-            -> Pipe streamIn streamOut returnIn {historyIn = pushHistoryIn, historyOut = pushHistoryOut, returnInvariant = NoInvariant} effects' returnOut
+            -> Pipe streamIn streamOut returnIn {historyIn = pushHistoryIn, historyOut = pushHistoryOut, returnInvariant = NoReturnInvariant} effects' returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
             = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
         push (Yield value upstreamNext) downstreamOnReturn downstreamOnStream
@@ -182,7 +186,7 @@ yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return 
 
 Effect :
     (effects: Type -> Type) -> (return: Type)
-    -> {default NoInvariant 0 returnInvariant: List Void -> return -> Type} -> Type
+    -> {default NoReturnInvariant 0 returnInvariant: List Void -> List Void -> return -> Type} -> Type
 Effect effects return = Pipe Void Void Void {historyIn = [], historyOut = [], returnInvariant} effects return
 
 
@@ -190,7 +194,7 @@ covering
 runPipeWithInvariant :
     Monad effects
     => Effect effects return {returnInvariant}
-    -> effects (Subset return (\returnValue => returnInvariant [] returnValue))
+    -> effects (Subset return (\returnValue => returnInvariant [] [] returnValue))
 runPipeWithInvariant (Do action) = action >>= \nextPipe => runPipeWithInvariant nextPipe
 runPipeWithInvariant (Yield value _) = absurd value
 runPipeWithInvariant (Await _ _) = runPipeWithInvariant $ Await {returnInvariant} absurd (\x => absurd x)
@@ -243,7 +247,7 @@ fromList list = recurse list proofBaseCase where
 --pipeWithListInput input pipe = todoInvariantPreservingPipeComposition (fromList input) pipe where
 --    todoInvariantPreservingPipeComposition :
 --        Monad effects
---        => Pipe Void streamIn Void {historyIn = [], returnInvariant = NoInvariant} effects ()
+--        => Pipe Void streamIn Void {historyIn = [], returnInvariant = NoReturnInvariant} effects ()
 --        -> Pipe streamIn Void () {historyIn = [], returnInvariant = innerReturnInvariant} effects returnOut
 --        -> Effect effects returnOut {returnInvariant = \finalHistoryIn, returnValue => innerReturnInvariant input returnValue}
 --    todoInvariantPreservingPipeComposition = ?todoComposeRhs
@@ -271,7 +275,7 @@ covering --todo
 foldPipe :
     (reducer: streamIn -> returnOut -> returnOut)
     -> (initialValue: returnOut)
-    -> Pipe streamIn Void () {historyIn = [], returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut
+    -> Pipe streamIn Void () {historyIn = [], returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut
 foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
     proofBaseCase : initialValue = foldr reducer initialValue []
     proofBaseCase = Refl
@@ -280,7 +284,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
         (0 historyIn: List streamIn)
         -> (accumulator: returnOut)
         -> (0 inductionHypothesis: accumulator = foldr reducer initialValue historyIn)
-        -> Pipe streamIn Void () {historyIn, returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut
+        -> Pipe streamIn Void () {historyIn, returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut
     recurse historyIn accumulator proofThatAccumulatorEqualsFoldr =
         Await
             (\_ => Return accumulator)
@@ -288,7 +292,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
         where
             onStream :
                 (value: streamIn)
-                -> Inf (Pipe streamIn Void () {historyIn = (value :: historyIn), returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut)
+                -> Inf (Pipe streamIn Void () {historyIn = (value :: historyIn), returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut)
             onStream value = recurse (value :: historyIn) (reducer value accumulator) previousAccumulatorAppliedOnceEqualsNextFoldr
                 where
                     previousFoldrAppliedOnceEqualsNextFoldr :
@@ -339,13 +343,13 @@ printEach = recurse where
 covering
 splitByEmptyLine :
     Monad effects
-    => Pipe String Void () {historyIn = [], returnInvariant = NoInvariant} effects splitReturnOut
-    -> Pipe String splitReturnOut () {historyIn = [], returnInvariant = NoInvariant} effects ()
+    => Pipe String Void () {historyIn = [], returnInvariant = NoReturnInvariant} effects splitReturnOut
+    -> Pipe String splitReturnOut () {historyIn = [], returnInvariant = NoReturnInvariant} effects ()
 splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
     runInnerPipe :
         (hasEnded: Bool)
-        -> Pipe String Void () {historyIn = innerHistoryIn, returnInvariant = NoInvariant} effects splitReturnOut
-        -> Pipe String splitReturnOut () {historyIn = outerHistoryIn, returnInvariant = NoInvariant} effects ()
+        -> Pipe String Void () {historyIn = innerHistoryIn, returnInvariant = NoReturnInvariant} effects splitReturnOut
+        -> Pipe String splitReturnOut () {historyIn = outerHistoryIn, returnInvariant = NoReturnInvariant} effects ()
     runInnerPipe hasEnded (Do action) = Do (action >>= \nextInnerPipe => lazyPure (runInnerPipe hasEnded nextInnerPipe))
     runInnerPipe _ (Yield value _) = absurd value
     runInnerPipe _ (Await onReturn onStream) =
@@ -368,14 +372,14 @@ parseNat = mapEach stringToNatOrZ
 
 covering
 sum : Monad effects => Pipe Nat Void () {historyIn = [], historyOut = [],
-            returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr (+) 0 finalHistoryIn}
+            returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturn => finalReturn = foldr (+) 0 finalHistoryIn}
         effects Nat
 sum = fromPurePipe $ foldPipe (+) 0
 
 
 covering
 max : Monad effects => Pipe Nat Void () {historyIn = [], historyOut = [],
-        returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn}
+        returnInvariant = \finalHistoryIn, finalHistoryOut, finalReturn => finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn}
     effects Nat
 max = fromPurePipe $ foldPipe maximum 0
 
