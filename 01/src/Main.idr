@@ -213,7 +213,7 @@ recurseToReturn :
         streamOut
         returnIn
         {
-            isInputExhausted = initialIsInputExhausted,
+            isInputExhausted = Yes () (),
             historyIn = initialHistoryIn,
             historyOut = initialHistoryOut,
             streamInvariant,
@@ -221,8 +221,8 @@ recurseToReturn :
         }
         effects
         returnOutA
-    -> ((0 mapIsInputExhausted: IsInputExhausted)
-        -> (0 mapHistoryIn: List streamIn)
+    -> (--(0 mapIsInputExhausted: IsInputExhausted)
+        (0 mapHistoryIn: List streamIn)
         -> (0 mapHistoryOut: List streamOut)
         -> returnOutA
         -> Pipe
@@ -230,7 +230,7 @@ recurseToReturn :
             streamOut
             returnIn
             {
-                isInputExhausted = mapIsInputExhausted,
+                isInputExhausted,
                 historyIn = mapHistoryIn,
                 historyOut = mapHistoryOut,
                 streamInvariant,
@@ -244,7 +244,7 @@ recurseToReturn :
         streamOut
         returnIn
             {
-                isInputExhausted = initialIsInputExhausted,
+                isInputExhausted,
                 historyIn = initialHistoryIn,
                 historyOut = initialHistoryOut,
                 streamInvariant,
@@ -255,7 +255,7 @@ recurseToReturn :
 
 recurseToReturn pipe mapReturn = recurse
         {
-            isInputExhausted = initialIsInputExhausted,
+            --isInputExhausted = initialIsInputExhausted,
             historyIn = initialHistoryIn,
             historyOut = initialHistoryOut
         }
@@ -267,7 +267,7 @@ recurseToReturn pipe mapReturn = recurse
             streamOut
             returnIn
             {
-                isInputExhausted,
+                isInputExhausted = Yes () (),
                 historyIn,
                 historyOut,
                 streamInvariant,
@@ -299,12 +299,13 @@ recurseToReturn pipe mapReturn = recurse
     recurse {historyIn, historyOut} (Yield {historyOut} value next)
         = Yield {historyIn, historyOut} value (recurse {historyIn, historyOut = (value :: historyOut)} next)
 
-    recurse {historyIn, historyOut} (Await onReturn onStream) = Await
-        {historyIn, historyOut}
-        (\end => recurse {historyIn, historyOut} (onReturn end))
-        (\streamNext => recurse {historyIn = (streamNext :: historyIn), historyOut} (onStream streamNext))
+    --recurse {historyIn, historyOut} (Await onReturn onStream) = Await
+    --    {historyIn, historyOut}
+    --    (\end => recurse {historyIn, historyOut} (onReturn end))
+    --    (\streamNext => recurse {historyIn = (streamNext :: historyIn), historyOut} (onStream streamNext))
 
-    recurse {isInputExhausted, historyIn, historyOut} (Return value) = mapReturn isInputExhausted historyIn historyOut value
+    --recurse {isInputExhausted, historyIn, historyOut} (Return value) = mapReturn isInputExhausted historyIn historyOut value
+    recurse {historyIn, historyOut} (Return value) = mapReturn historyIn historyOut value
 
 
 covering
@@ -315,7 +316,7 @@ covering
         streamOut
         returnIn
         {
-            isInputExhausted,
+            isInputExhausted = Yes () (),
             historyIn,
             historyOut,
             streamInvariant,
@@ -324,7 +325,7 @@ covering
         effects
         returnMid
     -> (returnMid
-        -> {0 newIsInputExhausted: IsInputExhausted}
+        ---> {0 newIsInputExhausted: IsInputExhausted}
         -> {0 newHistoryIn: List streamIn}
         -> {0 newHistoryOut: List streamOut}
         -> Pipe
@@ -332,7 +333,7 @@ covering
             streamOut
             returnIn
             {
-                isInputExhausted = newIsInputExhausted,
+                isInputExhausted,
                 historyIn = newHistoryIn,
                 historyOut = newHistoryOut,
                 streamInvariant,
@@ -354,7 +355,7 @@ covering
         }
         effects
         returnOut
-effects >>= function = recurseToReturn effects (\isInputExhausted, mapHistoryIn, mapHistoryOut, value => function value)
+effects >>= function = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
 
 
 lift :
@@ -595,7 +596,18 @@ covering --todo totality
 yield :
     (value: streamOut)
     -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
-    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant} effects ()
+    -> Pipe
+        streamIn
+        streamOut
+        returnIn
+        {
+            isInputExhausted,
+            historyIn,
+            historyOut,
+            streamInvariant
+        }
+        effects
+        ()
 yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return ()) -- We set Return () as the initial continuation, which can then be built upon monadically
 
 
@@ -732,7 +744,7 @@ mapEach function = Await
     (\returnValue => Return returnValue)
     (\streamValue => do
         _ <- yield (function streamValue)
-        ?todomapeach--mapEach function
+        mapEach function
     )
 
 
@@ -837,7 +849,7 @@ printEach = recurse where
             _ <- lift $ putStrLn "Printing..."
             _ <- lift $ putStrLn (show streamValue)
             _ <- yield streamValue
-            ?todoprinteachrecurse--recurse
+            recurse
         )
 
 
