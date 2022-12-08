@@ -195,9 +195,6 @@ runPipeWithInvariant (Do action) = action >>= \nextPipe => runPipeWithInvariant 
 runPipeWithInvariant (Yield value _) = absurd value
 runPipeWithInvariant (Await _ _) = runPipeWithInvariant $ Await {returnInvariant} absurd (\x => absurd x)
 runPipeWithInvariant (Return value {returnInvariantProof}) = pure (Element value returnInvariantProof)
---runPipeWithInvariant (Return value {returnInvariantProof}) = thePure (value ** returnInvariantProof) where
-    --thePure : (value: return ** returnInvariant [] value) -> effects (value: return ** returnInvariant [] value)
-    --thePure = pure
 
 
 covering
@@ -210,7 +207,6 @@ runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 covering
 fromList : (Monad effects, Eq streamOut) => (list: List streamOut) -> Pipe Void streamOut Void {historyIn = [], historyOut = [],
-    --streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True} effects ()
     streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
 fromList list = recurse list proofBaseCase where
     proofBaseCase : list = list
@@ -220,37 +216,14 @@ fromList list = recurse list proofBaseCase where
         (remaining: List streamOut)
         -> (0 inductionHypothesis: (reverse historyOut) ++ remaining = list)
         -> Pipe Void streamOut Void
-            --{historyOut, streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True} effects ()
             {historyOut, streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
     recurse [] historyIsPrefix = Return ()
     recurse (x :: xs) historyIsPrefix =
-        -- yield x
-        --     {streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True,
-        --     streamInvariantProof = inductionStep}
-        --     >>= (\() => recurse xs inductionStep) where
-        --         inductionStep : ?todoinductionstep
         Yield x
             {streamInvariantProof = (xs ** inductionStep)}
-            --{streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True,
-            --streamInvariantProof = inductionStep}
             (recurse xs inductionStep) where
                 reverseMovesHeadToEnd : (x: a) -> (xs : List a) -> reverse (x :: xs) = (reverse xs) ++ [x]
                 reverseMovesHeadToEnd x xs = reverseOntoSpec [x] xs
-                --lemma : (xs: List a) -> (y: a) -> (zs: List a) -> (reverse (y :: xs)) ++ zs = (reverse xs) ++ (y :: zs)
-                --lemma [] y zs = Refl
-                --lemma (x :: xs) y zs = lemma xs y zs `trans` (sym $ lemma xs x (y :: zs))-- where
-                --    left : (reverse (y :: xs)) ++ zs = (reverse xs) ++ (y :: zs)
-                --    right : (reverse (x :: xs)) ++ (y :: zs) = (reverse xs) ++ (x :: (y :: zs))
-                --    --goal : (reverse (y :: (x :: xs))) ++ (zs) = (reverse (x :: xs)) ++ (y :: zs)
-                --lemma = lemmaRecurse [] lemmaBaseCase where
-                --    lemmaBaseCase : [y] ++ zs = y :: zs
-                --    lemmaBaseCase = Refl
-                --    lemmaRecurse : (xsPart: List a) -> (reverse (y :: xsPart)) ++ zs = (reverse xsPart) ++ (y :: zs)
-                --    lemmaRecurse [] = Refl
-
-                --0 historyIsPrefix : reverseOnto [] historyOut ++ (x :: xs) = list
-                --------------------------------
-                --todohistoryIsPrefix : (reverseOnto [] historyOut ++ [x]) ++ xs = list
 
                 0 inductionHypothesis : (reverse historyOut) ++ (x :: xs) = list
                 inductionHypothesis = historyIsPrefix
@@ -258,14 +231,7 @@ fromList list = recurse list proofBaseCase where
                 0 hypothesisRearranged : ((reverse historyOut) ++ [x]) ++ xs = list
                 hypothesisRearranged = rewrite sym (appendAssociative (reverse historyOut) [x] xs) in inductionHypothesis
 
-                --rearranged : (reverse historyOut) ++ [x] ++ xs = list
-                --rearranged = rewrite 
-
-                --surelyTrivial : [x] ++ xs = x :: xs
-                --surelyTrivial = Refl
-
                 0 inductionStep : (reverse (x :: historyOut)) ++ xs = list
-                --inductionStep = lemma historyOut x xs `trans` historyIsPrefix
                 inductionStep = rewrite reverseMovesHeadToEnd x historyOut in hypothesisRearranged
 
 
