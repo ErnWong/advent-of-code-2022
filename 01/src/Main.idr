@@ -153,7 +153,7 @@ data Pipe :
 
     Return :
         (returnValue: returnOut)
-        -> {auto 0 returnInvariantProof : returnInvariant isInputExhausted historyIn historyOut returnValue}
+        -> (0 returnInvariantProof : returnInvariant isInputExhausted historyIn historyOut returnValue)
         -> Pipe
             streamIn
             streamOut
@@ -305,7 +305,7 @@ recurseToReturn pipe mapReturn = recurse
     --    (\streamNext => recurse {historyIn = (streamNext :: historyIn), historyOut} (onStream streamNext))
 
     --recurse {isInputExhausted, historyIn, historyOut} (Return value) = mapReturn isInputExhausted historyIn historyOut value
-    recurse {historyIn, historyOut} (Return value) = mapReturn historyIn historyOut value
+    recurse {historyIn, historyOut} (Return value returnInvariantProof) = mapReturn historyIn historyOut value
 
 
 covering
@@ -362,7 +362,7 @@ lift :
     Monad effects
     => effects returnOut
     -> Pipe streamIn streamOut returnIn {historyIn, returnInvariant = NoReturnInvariant} effects returnOut
-lift effects = Do (effects >>= \value => lazyPure (Return value))
+lift effects = Do (effects >>= \value => lazyPure (Return value ()))
 
 
 -- Recurse to Do and map it from Identity to effect
@@ -423,7 +423,7 @@ fromPurePipe pipe = recurse pipe where
     recurse (Await onReturn onStream) = Await
         (\value => recurse $ onReturn value)
         (\value => recurse $ onStream value)
-    recurse (Return value) = Return value
+    recurse (Return value returnInvariantProof) = Return value returnInvariantProof
 
 
 infixr 9 .|
@@ -520,8 +520,8 @@ covering --todo totality
             = Yield value (pull upstream downstreamNext)
         pull upstream (Await downstreamOnReturn downstreamOnStream)
             = push upstream downstreamOnReturn downstreamOnStream
-        pull upstream (Return value)
-            = Return value
+        pull upstream (Return value returnInvariantProof)
+            = Return value ()
 
         push :
             Monad effects'
@@ -589,8 +589,8 @@ covering --todo totality
             = Await
                 (\value => push (upstreamOnReturn value) downstreamOnReturn downstreamOnStream)
                 (\value => push (upstreamOnStream value) downstreamOnReturn downstreamOnStream)
-        push (Return value) downstreamOnReturn downstreamOnStream
-            = pull (Return value) ?todopipepushreturn--(downstreamOnReturn value)
+        push (Return value returnInvariantProof) downstreamOnReturn downstreamOnStream
+            = pull (Return value returnInvariantProof) (downstreamOnReturn {upstreamReturnProof = returnInvariantProof} value)
 
 
 yield :
@@ -608,7 +608,7 @@ yield :
         }
         effects
         ()
-yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return ()) -- We set Return () as the initial continuation, which can then be built upon monadically
+yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return () ()) -- We set Return () as the initial continuation, which can then be built upon monadically
 
 
 Effect :
@@ -741,7 +741,7 @@ mapEach :
         effects
         return
 mapEach function = Await  
-    (\returnValue => Return returnValue)
+    (\returnValue => Return returnValue ())
     (\streamValue => do
         _ <- yield (function streamValue)
         mapEach function
@@ -788,7 +788,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
 
     recurse historyIn accumulator proofThatAccumulatorEqualsFoldr =
         Await
-            (\_ => Return accumulator)
+            (\_ => Return accumulator proofThatAccumulatorEqualsFoldr)
             onStream
         where
             onStream :
@@ -831,7 +831,7 @@ readLines = recurse where
         line <- lift getLine
         eof <- lift $ fEOF stdin
         if eof
-            then Return ()
+            then Return () ()
             else do
                 _ <- yield line
                 recurse
@@ -844,7 +844,7 @@ printEach :
 printEach = recurse where
     recurse : Pipe streamValue streamValue () {isInputExhausted = No} (App effects) ()
     recurse = Await
-        (\_ => Return ())
+        (\_ => Return () ())
         (\streamValue => do
             _ <- lift $ putStrLn "Printing..."
             _ <- lift $ putStrLn (show streamValue)
@@ -916,10 +916,10 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
             (\streamValue => case streamValue of
                 "" => runInnerPipe False (onReturn ())
                 nonEmpty => runInnerPipe False (onStream nonEmpty))
-    runInnerPipe hasEnded (Return value) = do
+    runInnerPipe hasEnded (Return value returnInvariantProof) = do
         _ <- yield value
         if hasEnded
-            then Return () {returnInvariantProof = ()}
+            then Return () ()
             else ?todosplitreturn--runInnerPipe False initialInnerPipeline
 
 
