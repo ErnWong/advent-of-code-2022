@@ -6,6 +6,8 @@ import Control.App.FileIO
 import Control.Monad.Identity
 import Control.Monad.Trans
 import Data.DPair
+import Data.List
+import Data.List.Reverse
 import Data.Nat
 import Data.String
 import System.File.Virtual
@@ -54,24 +56,24 @@ data Pipe :
 ||| instead of using `pure` directly.
 lazyPure :
     Monad effects
-    => Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut)
-    -> effects (Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant} effects returnOut))
+    => Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut)
+    -> effects (Inf (Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant} effects returnOut))
 lazyPure = pure
 
 
 covering
 recurseToReturn :
     Monad effects
-    => Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, returnInvariant = NoInvariant} effects returnOutA
+    => Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutA
     -> ((0 mapHistoryIn: List streamIn)
         -> (0 mapHistoryOut: List streamOut)
         -> returnOutA
-        -> Pipe streamIn streamOut returnIn {historyIn = mapHistoryIn, historyOut = mapHistoryOut, returnInvariant = NoInvariant} effects returnOutB)
-    -> Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, returnInvariant = NoInvariant} effects returnOutB
+        -> Pipe streamIn streamOut returnIn {historyIn = mapHistoryIn, historyOut = mapHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB)
+    -> Pipe streamIn streamOut returnIn {historyIn = initialHistoryIn, historyOut = initialHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB
 recurseToReturn pipe mapReturn = recurse {historyIn = initialHistoryIn, historyOut = initialHistoryOut} pipe where
     recurse :
-        Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnOutA
-        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnOutB
+        Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutA
+        -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOutB
     recurse {historyIn, historyOut} (Do {historyIn, historyOut} action) = Do
         {historyIn, historyOut}
         (do
@@ -89,9 +91,9 @@ recurseToReturn pipe mapReturn = recurse {historyIn = initialHistoryIn, historyO
 covering
 (>>=) :
     Monad effects
-    => Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnMid
-    -> (returnMid -> {0 newHistoryIn: List streamIn} -> {0 newHistoryOut: List streamOut} -> Pipe streamIn streamOut returnIn {historyIn = newHistoryIn, historyOut = newHistoryOut, returnInvariant = NoInvariant} effects returnOut)
-    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, returnInvariant = NoInvariant} effects returnOut
+    => Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnMid
+    -> (returnMid -> {0 newHistoryIn: List streamIn} -> {0 newHistoryOut: List streamOut} -> Pipe streamIn streamOut returnIn {historyIn = newHistoryIn, historyOut = newHistoryOut, streamInvariant, returnInvariant = NoInvariant} effects returnOut)
+    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant, returnInvariant = NoInvariant} effects returnOut
 effects >>= function = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
 
 
@@ -171,8 +173,11 @@ covering --todo totality
             = pull (Return value) (downstreamOnReturn value)
 
 
-yield : streamOut -> Pipe streamIn streamOut returnIn effects ()
-yield value = Yield value (Return ()) -- We set Return () as the initial continuation, which can then be built upon monadically
+yield :
+    (value: streamOut)
+    -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
+    -> Pipe streamIn streamOut returnIn {historyIn, historyOut, streamInvariant} effects ()
+yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return ()) -- We set Return () as the initial continuation, which can then be built upon monadically
 
 
 Effect :
@@ -204,11 +209,64 @@ runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 
 covering
-fromList : Monad effects => List streamOut -> Pipe Void streamOut Void {historyIn = []} effects ()
-fromList = recurse where
-    recurse : List streamOut -> Pipe Void streamOut Void effects ()
-    recurse [] = Return ()
-    recurse (x :: xs) = yield x >>= (\() => recurse xs)
+fromList : (Monad effects, Eq streamOut) => (list: List streamOut) -> Pipe Void streamOut Void {historyIn = [], historyOut = [],
+    --streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True} effects ()
+    streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
+fromList list = recurse list proofBaseCase where
+    proofBaseCase : list = list
+    proofBaseCase = Refl
+
+    recurse :
+        (remaining: List streamOut)
+        -> (0 inductionHypothesis: (reverse historyOut) ++ remaining = list)
+        -> Pipe Void streamOut Void
+            --{historyOut, streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True} effects ()
+            {historyOut, streamInvariant = \currentHistoryIn, currentHistoryOut => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list)} effects ()
+    recurse [] historyIsPrefix = Return ()
+    recurse (x :: xs) historyIsPrefix =
+        -- yield x
+        --     {streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True,
+        --     streamInvariantProof = inductionStep}
+        --     >>= (\() => recurse xs inductionStep) where
+        --         inductionStep : ?todoinductionstep
+        Yield x
+            {streamInvariantProof = (xs ** inductionStep)}
+            --{streamInvariant = \currentHistoryIn, currentHistoryOut => (reverse currentHistoryOut) `isPrefixOf` list = True,
+            --streamInvariantProof = inductionStep}
+            (recurse xs inductionStep) where
+                reverseMovesHeadToEnd : (x: a) -> (xs : List a) -> reverse (x :: xs) = (reverse xs) ++ [x]
+                reverseMovesHeadToEnd x xs = reverseOntoSpec [x] xs
+                --lemma : (xs: List a) -> (y: a) -> (zs: List a) -> (reverse (y :: xs)) ++ zs = (reverse xs) ++ (y :: zs)
+                --lemma [] y zs = Refl
+                --lemma (x :: xs) y zs = lemma xs y zs `trans` (sym $ lemma xs x (y :: zs))-- where
+                --    left : (reverse (y :: xs)) ++ zs = (reverse xs) ++ (y :: zs)
+                --    right : (reverse (x :: xs)) ++ (y :: zs) = (reverse xs) ++ (x :: (y :: zs))
+                --    --goal : (reverse (y :: (x :: xs))) ++ (zs) = (reverse (x :: xs)) ++ (y :: zs)
+                --lemma = lemmaRecurse [] lemmaBaseCase where
+                --    lemmaBaseCase : [y] ++ zs = y :: zs
+                --    lemmaBaseCase = Refl
+                --    lemmaRecurse : (xsPart: List a) -> (reverse (y :: xsPart)) ++ zs = (reverse xsPart) ++ (y :: zs)
+                --    lemmaRecurse [] = Refl
+
+                --0 historyIsPrefix : reverseOnto [] historyOut ++ (x :: xs) = list
+                --------------------------------
+                --todohistoryIsPrefix : (reverseOnto [] historyOut ++ [x]) ++ xs = list
+
+                0 inductionHypothesis : (reverse historyOut) ++ (x :: xs) = list
+                inductionHypothesis = historyIsPrefix
+
+                0 hypothesisRearranged : ((reverse historyOut) ++ [x]) ++ xs = list
+                hypothesisRearranged = rewrite sym (appendAssociative (reverse historyOut) [x] xs) in inductionHypothesis
+
+                --rearranged : (reverse historyOut) ++ [x] ++ xs = list
+                --rearranged = rewrite 
+
+                --surelyTrivial : [x] ++ xs = x :: xs
+                --surelyTrivial = Refl
+
+                0 inductionStep : (reverse (x :: historyOut)) ++ xs = list
+                --inductionStep = lemma historyOut x xs `trans` historyIsPrefix
+                inductionStep = rewrite reverseMovesHeadToEnd x historyOut in hypothesisRearranged
 
 
 --pipeWithListInput :
@@ -225,12 +283,12 @@ fromList = recurse where
 --    todoInvariantPreservingPipeComposition = ?todoComposeRhs
 
 
-covering
-runPurePipeWithList :
-    Pipe streamIn Void () {historyIn = [], returnInvariant} Identity returnOut
-    -> (input: List streamIn)
-    -> Subset returnOut (\returnValue => returnInvariant input returnValue)
-runPurePipeWithList pipe list = ?todoRunPurePipeWithList --runIdentity $ runPipeWithInvariant (todoPipeCompose (fromList list) pipe) where
+--covering
+--runPurePipeWithList :
+--    Pipe streamIn Void () {historyIn = [], returnInvariant} Identity returnOut
+--    -> (input: List streamIn)
+--    -> Subset returnOut (\returnValue => returnInvariant input returnValue)
+--runPurePipeWithList pipe list = ?todoRunPurePipeWithList --runIdentity $ runPipeWithInvariant (todoPipeCompose (fromList list) pipe) where
 
 
 covering
@@ -255,7 +313,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
     recurse :
         (0 historyIn: List streamIn)
         -> (accumulator: returnOut)
-        -> (accumulator = foldr reducer initialValue historyIn)
+        -> (0 inductionHypothesis: accumulator = foldr reducer initialValue historyIn)
         -> Pipe streamIn Void () {historyIn, returnInvariant = \finalHistoryIn, finalReturn => finalReturn = foldr reducer initialValue finalHistoryIn} Identity returnOut
     recurse historyIn accumulator proofThatAccumulatorEqualsFoldr =
         Await
