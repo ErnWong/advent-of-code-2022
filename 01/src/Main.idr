@@ -19,7 +19,7 @@ import System.File.Virtual
 
 data IsInputExhausted : Type where
     No : IsInputExhausted
-    Yes : (upstreamReturnProperty: Type) -> (upstreamReturnProof: upstreamReturnProperty) -> IsInputExhausted
+    Yes : (0 upstreamReturnProperty: Type) -> (0 upstreamReturnProof: upstreamReturnProperty) -> IsInputExhausted
 
 
 NoStreamInvariant : List streamIn -> List streamOut -> Type
@@ -107,7 +107,7 @@ data Pipe :
     Await :
         (returnIn
             -> {0 upstreamReturnProperty: Type}
-            -> {0 upstreamReturnProof: upstreamReturnProperty}
+            -> (0 upstreamReturnProof: upstreamReturnProperty)
             -> Inf (Pipe
                 streamIn
                 streamOut
@@ -421,8 +421,54 @@ fromPurePipe pipe = recurse pipe where
     recurse (Do action) = Do (pure (runIdentity action) >>= \next => lazyPure $ recurse next)
     recurse (Yield value next) = Yield value (recurse next)
     recurse (Await onReturn onStream) = Await
-        (\value => recurse $ onReturn value)
+        (\value, upstreamReturnProof => recurse $ onReturn value upstreamReturnProof)
         (\value => recurse $ onStream value)
+    recurse (Return value returnInvariantProof) = Return value returnInvariantProof
+
+
+covering
+fromInputExhaustedPipe :
+    Monad effects
+    => Pipe
+        streamIn
+        streamOut
+        returnIn
+        {
+            isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof
+        }
+        effects
+        returnOut
+    -> Pipe
+        streamIn
+        streamOut
+        returnIn
+        {
+            isInputExhausted = No
+        }
+        effects
+        returnOut
+fromInputExhaustedPipe pipe = recurse pipe where
+    recurse :
+        Pipe
+            streamIn
+            streamOut
+            returnIn
+            {
+                isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof
+            }
+            effects
+            returnOut
+        -> Pipe
+            streamIn
+            streamOut
+            returnIn
+            {
+                isInputExhausted = No
+            }
+            effects
+            returnOut
+    recurse (Do action) = Do (action >>= \next => lazyPure $ recurse next)
+    recurse (Yield value next) = Yield value (recurse next)
     recurse (Return value returnInvariantProof) = Return value returnInvariantProof
 
 
@@ -542,7 +588,7 @@ covering --todo totality
                 returnMid
             -> (returnMid
                 -> {0 upstreamReturnProperty: Type}
-                -> {0 upstreamReturnProof: upstreamReturnProperty}
+                -> (0 upstreamReturnProof: upstreamReturnProperty)
                 -> Inf (Pipe
                     streamMid
                     streamOut
@@ -587,10 +633,10 @@ covering --todo totality
             = pull upstreamNext (downstreamOnStream value)
         push (Await upstreamOnReturn upstreamOnStream) downstreamOnReturn downstreamOnStream
             = Await
-                (\value => push (upstreamOnReturn value) downstreamOnReturn downstreamOnStream)
+                (\value, upstreamReturnProof => push (upstreamOnReturn value upstreamReturnProof) downstreamOnReturn downstreamOnStream)
                 (\value => push (upstreamOnStream value) downstreamOnReturn downstreamOnStream)
         push (Return value returnInvariantProof) downstreamOnReturn downstreamOnStream
-            = pull (Return value returnInvariantProof) (downstreamOnReturn {upstreamReturnProof = returnInvariantProof} value)
+            = pull (Return value returnInvariantProof) (downstreamOnReturn value returnInvariantProof)
 
 
 yield :
@@ -741,7 +787,7 @@ mapEach :
         effects
         return
 mapEach function = Await  
-    (\returnValue => Return returnValue ())
+    (\returnValue, returnProof => Return returnValue ())
     (\streamValue => do
         _ <- yield (function streamValue)
         mapEach function
@@ -788,7 +834,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
 
     recurse historyIn accumulator proofThatAccumulatorEqualsFoldr =
         Await
-            (\_ => Return accumulator proofThatAccumulatorEqualsFoldr)
+            (\returnValue, returnProof => Return accumulator proofThatAccumulatorEqualsFoldr)
             onStream
         where
             onStream :
@@ -844,7 +890,7 @@ printEach :
 printEach = recurse where
     recurse : Pipe streamValue streamValue () {isInputExhausted = No} (App effects) ()
     recurse = Await
-        (\_ => Return () ())
+        (\returnValue, returnProof => Return () ())
         (\streamValue => do
             _ <- lift $ putStrLn "Printing..."
             _ <- lift $ putStrLn (show streamValue)
@@ -853,7 +899,7 @@ printEach = recurse where
         )
 
 
-partial--todo covering
+covering
 splitByEmptyLine :
     Monad effects
     => Pipe
@@ -878,9 +924,11 @@ splitByEmptyLine :
         }
         effects
         ()
-splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
+--splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline where
+splitByEmptyLine initialInnerPipeline = runInnerPipe No initialInnerPipeline where
     runInnerPipe :
-        (hasEnded: Bool)
+        --(hasEnded: Bool)
+        (isInputExhausted: IsInputExhausted)
         -> Pipe
             String
             Void
@@ -898,7 +946,8 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
             splitReturnOut
             ()
             {
-                isInputExhausted = if hasEnded then Yes () () else No,
+                isInputExhausted,
+                --isInputExhausted = if hasEnded then Yes () () else No,
                 historyIn = outerHistoryIn,
                 historyOut = outerHistoryOut,
                 returnInvariant = NoReturnInvariant
@@ -906,21 +955,25 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe False initialInnerPipeline 
             effects
             ()
     runInnerPipe hasEnded (Do action) = Do (action >>= \nextInnerPipe
-        => ?todosplitdoaction--lazyPure (runInnerPipe hasEnded nextInnerPipe)
+        => lazyPure (runInnerPipe hasEnded nextInnerPipe)
+        --=> lazyPure (runInnerPipe hasEnded ?todonextinnerpipe)
+        --=> ?todosplitdoaction--lazyPure (runInnerPipe hasEnded nextInnerPipe)
         )
     runInnerPipe _ (Yield value _) = absurd value
-    runInnerPipe False (Await onReturn onStream) =
+    runInnerPipe {innerHistoryIn, innerHistoryOut} No (Await onReturn onStream) =
         Await
-            (\_ => ?todosplitawait--runInnerPipe True (onReturn ())
+            (\returnValue, returnProof => runInnerPipe (Yes _ _) (onReturn () returnProof)
                 )
             (\streamValue => case streamValue of
-                "" => runInnerPipe False (onReturn ())
-                nonEmpty => runInnerPipe False (onStream nonEmpty))
-    runInnerPipe hasEnded (Return value returnInvariantProof) = do
+                "" => runInnerPipe {innerHistoryIn, innerHistoryOut} No (fromInputExhaustedPipe $ onReturn () ())
+                nonEmpty => runInnerPipe No (onStream nonEmpty))
+    runInnerPipe isInputExhausted (Return value returnInvariantProof) = do
         _ <- yield value
-        if hasEnded
-            then Return () ()
-            else ?todosplitreturn--runInnerPipe False initialInnerPipeline
+        case isInputExhausted of
+            Yes _ _ => Return () ()
+            No => runInnerPipe No initialInnerPipeline
+            --then Return () ()
+            --else ?todosplitreturn--runInnerPipe No initialInnerPipeline
 
 
 covering
@@ -971,11 +1024,11 @@ printReturnValue :
 printReturnValue = recurse where
     recurse : Pipe Void Void return {isInputExhausted = No} (App effects) ()
     recurse = Await
-        (\returnValue => lift $ putStrLn (show returnValue))
+        (\returnValue, returnProof => lift $ putStrLn (show returnValue))
         (\_ => recurse)
 
 
-partial --todo splitByEmptyLine covering
+covering
 app : Has [FileIO, Console] effects => App effects ()
 app = runPipe $
     readLines
@@ -985,7 +1038,7 @@ app = runPipe $
     .| printReturnValue
 
 
-partial --todo splitByEmptyLine covering
+covering
 main : IO ()
 main = run $ handle app
     (\() => putStr "Ok")
