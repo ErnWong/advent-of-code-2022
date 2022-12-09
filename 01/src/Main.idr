@@ -826,7 +826,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
             {
                 isInputExhausted = No,
                 historyIn,
-                returnInvariant = \finalIsInputExhaused, finalHistoryIn, finalHistoryOut, finalReturn
+                returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
                     => finalReturn = foldr reducer initialValue finalHistoryIn
             }
             Identity
