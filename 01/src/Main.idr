@@ -654,7 +654,8 @@ testeq (a ** b) c = rewrite c in b
 
 
 infixr 9 .|
-||| The pipe operator chains two pipes together.
+||| Operator to compose two pipes together, where the streamOut and returnOut of the upstream pipe flow
+||| into the streamIn and returnIn of the downstream pipe, similar to that of Unix streams and pipes.
 covering --todo totality
 (.|) :
     Monad effects
