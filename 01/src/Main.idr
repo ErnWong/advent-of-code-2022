@@ -1071,12 +1071,51 @@ fromList list = recurse list proofBaseCase where
 --    todoInvariantPreservingPipeComposition = ?todoComposeRhs
 
 
---covering
---runPurePipeWithList :
---    Pipe streamIn Void () {historyIn = [], returnInvariant} Identity returnOut
---    -> (input: List streamIn)
---    -> Subset returnOut (\returnValue => returnInvariant input returnValue)
---runPurePipeWithList pipe list = ?todoRunPurePipeWithList --runIdentity $ runPipeWithInvariant (todoPipeCompose (fromList list) pipe) where
+covering
+runPurePipeWithList :
+    Pipe
+        streamIn
+        Void
+        ()
+        {
+            isInputExhausted = No,
+            historyIn = [],
+            historyOut = [],
+            returnInvariant
+        }
+        Identity
+        returnOut
+    -> (input: List streamIn)
+    ---> Subset returnOut (\returnValue => returnInvariant (Yes () ()) input [] returnValue)
+    -> Subset returnOut $
+        \returnValue
+            => composeReturnInvariants
+                {
+                    streamIn = Void,
+                    returnMid = ()
+                }
+                (\_, _, finalHistoryMid, _ => reverse finalHistoryMid = input)
+                returnInvariant
+                (Yes () ())
+                []
+                []
+                returnValue
+runPurePipeWithList pipe list = runIdentity $ runPipeWithInvariant $ fromList list .| pipe
+--runPurePipeWithList pipe list =
+--    let
+--        --myCompose = (.|) {returnMid = ()}
+--        pipeline : Effect Identity returnOut
+--            {
+--                returnInvariant = -- \finalIsInputExhausted, [], [], finalReturn
+--                    composeReturnInvariants
+--                        {returnMid = ()}
+--                        (\_, _, finalHistoryMid, _ => reverse finalHistoryMid = list)
+--                        returnInvariant
+--            }
+--        pipeline = fromList list .| pipe
+--        --pipeline = myCompose (fromList list) pipe
+--    in
+--        runIdentity $ runPipeWithInvariant $ pipeline
 
 
 covering
