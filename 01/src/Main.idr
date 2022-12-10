@@ -1000,7 +1000,7 @@ runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 covering
 fromList :
-    (Monad effects, Eq streamOut)
+    Monad effects
     => (list: List streamOut)
     -> Pipe
         Void
