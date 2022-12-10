@@ -33,6 +33,13 @@ NoReturnInvariant _ _ _ _ = ()
 ||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 ||| Extensions to IdrisPipes: We now index by history (erased at runtime) and an invariant
 ||| so we can reason about some properties of what a pipe outputs.
+|||
+||| Note: At the moment, the streamInvariant only holds every time this pipe yields a stream
+||| output value, and it's not enforced when awaited a new stream input value. This is because
+||| our streamInvariant could be imposing some constraints on what input stream values are allowed
+||| but in reality an downstream pipe has no control over what an upstream pipe sends downstream.
+||| It might be possible to fix this by making sure the (.|) operator enforces the downstream's
+||| stream invariant by restricting what upstream pipes are allowed.
 data Pipe :
     (streamIn, streamOut, returnIn: Type)
     -> {0 isInputExhausted : IsInputExhausted} -- TODO: We can pack these into a new PipeState record type
@@ -42,6 +49,7 @@ data Pipe :
     -> (returnOut : Type)
     -> {default NoStreamInvariant 0 streamInvariant : List streamIn -> List streamOut -> Type}
     -> {default NoReturnInvariant 0 returnInvariant : IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type}
+    --> {auto 0 streamInvariantProof : streamInvariant historyIn historyOut} We can't do this because a pipe doesn't have control over what it receives
     -> Type where
 
     Do :
@@ -55,6 +63,7 @@ data Pipe :
                 historyOut,
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof
             }
             effects
             returnOut
@@ -69,6 +78,7 @@ data Pipe :
                 historyOut,
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof
             }
             effects
             returnOut
@@ -86,6 +96,7 @@ data Pipe :
                 historyOut = (value :: historyOut),
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof
             }
             effects
             returnOut
@@ -100,6 +111,7 @@ data Pipe :
                 historyOut,
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof = oldStreamInvariantProof
             }
             effects
             returnOut
@@ -118,11 +130,13 @@ data Pipe :
                     historyOut,
                     streamInvariant,
                     returnInvariant
+                    --streamInvariantProof
                 }
                 effects
                 returnOut
             ))
         -> ((value: streamIn)
+            ---> (0 newStreamInvariantProof : streamInvariant (value :: historyIn) historyOut) Here is the problem - why should it satisfy an arbitrary invariant?
             -> Inf (Pipe
                 streamIn
                 streamOut
@@ -133,6 +147,7 @@ data Pipe :
                     historyOut,
                     streamInvariant,
                     returnInvariant
+                    --streamInvariantProof = newStreamInvariantProof
                 }
                 effects 
                 returnOut
@@ -147,6 +162,7 @@ data Pipe :
                 historyOut,
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof
             }
             effects
             returnOut
@@ -164,6 +180,7 @@ data Pipe :
                 historyOut,
                 streamInvariant,
                 returnInvariant
+                --streamInvariantProof
             }
             effects
             returnOut
@@ -183,6 +200,7 @@ lazyPure :
             historyOut,
             streamInvariant,
             returnInvariant
+            --streamInvariantProof
         }
         effects
         returnOut
@@ -197,6 +215,7 @@ lazyPure :
             historyOut,
             streamInvariant,
             returnInvariant
+            --streamInvariantProof
         }
         effects
         returnOut
@@ -218,12 +237,14 @@ recurseToReturn :
             historyOut = initialHistoryOut,
             streamInvariant,
             returnInvariant = NoReturnInvariant
+            --streamInvariantProof = initialStreamInvariantProof
         }
         effects
         returnOutA
     -> (--(0 mapIsInputExhausted: IsInputExhausted)
         (0 mapHistoryIn: List streamIn)
         -> (0 mapHistoryOut: List streamOut)
+        ---> (0 mapStreamInvariantProof: streamInvariant mapHistoryIn mapHistoryOut)
         -> returnOutA
         -> Pipe
             streamIn
@@ -235,6 +256,7 @@ recurseToReturn :
                 historyOut = mapHistoryOut,
                 streamInvariant,
                 returnInvariant = NoReturnInvariant
+                --streamInvariantProof = mapStreamInvariantProof
             }
             effects
             returnOutB
@@ -249,6 +271,7 @@ recurseToReturn :
                 historyOut = initialHistoryOut,
                 streamInvariant,
                 returnInvariant = NoReturnInvariant
+                --streamInvariantProof = initialStreamInvariantProof
             }
         effects
         returnOutB
@@ -272,6 +295,7 @@ recurseToReturn pipe mapReturn = recurse
                 historyOut,
                 streamInvariant,
                 returnInvariant = NoReturnInvariant
+                --streamInvariantProof
             }
             effects
             returnOutA
@@ -285,6 +309,7 @@ recurseToReturn pipe mapReturn = recurse
                 historyOut,
                 streamInvariant,
                 returnInvariant = NoReturnInvariant
+                --streamInvariantProof
             }
             effects
             returnOutB
@@ -296,8 +321,12 @@ recurseToReturn pipe mapReturn = recurse
             lazyPure {streamIn, historyIn, historyOut} (recurse {historyIn, historyOut} next)
         )
 
-    recurse {historyIn, historyOut} (Yield {historyOut} value next)
-        = Yield {historyIn, historyOut} value (recurse {historyIn, historyOut = (value :: historyOut)} next)
+    recurse {historyIn, historyOut} (Yield {historyOut, streamInvariantProof} value next)
+        = Yield
+            --{historyIn, historyOut, streamInvariantProof}
+            value
+            --(recurse {historyIn, historyOut = (value :: historyOut), streamInvariantProof} next)
+            (recurse {historyIn, historyOut = (value :: historyOut)} next)
 
     --recurse {historyIn, historyOut} (Await onReturn onStream) = Await
     --    {historyIn, historyOut}
@@ -305,7 +334,10 @@ recurseToReturn pipe mapReturn = recurse
     --    (\streamNext => recurse {historyIn = (streamNext :: historyIn), historyOut} (onStream streamNext))
 
     --recurse {isInputExhausted, historyIn, historyOut} (Return value) = mapReturn isInputExhausted historyIn historyOut value
-    recurse {historyIn, historyOut} (Return value returnInvariantProof) = mapReturn historyIn historyOut value
+    --recurse {historyIn, historyOut, streamInvariantProof} (Return value returnInvariantProof)
+    --    = mapReturn historyIn historyOut streamInvariantProof value
+    recurse {historyIn, historyOut} (Return value returnInvariantProof)
+        = mapReturn historyIn historyOut value
 
 
 covering
@@ -321,6 +353,7 @@ covering
             historyOut,
             streamInvariant,
             returnInvariant = NoReturnInvariant
+            --streamInvariantProof
         }
         effects
         returnMid
@@ -328,6 +361,7 @@ covering
         ---> {0 newIsInputExhausted: IsInputExhausted}
         -> {0 newHistoryIn: List streamIn}
         -> {0 newHistoryOut: List streamOut}
+        ---> {0 newStreamInvariantProof: streamInvariant newHistoryIn newHistoryOut}
         -> Pipe
             streamIn
             streamOut
@@ -338,6 +372,7 @@ covering
                 historyOut = newHistoryOut,
                 streamInvariant,
                 returnInvariant = NoReturnInvariant
+                --streamInvariantProof = newStreamInvariantProof
             }
             effects
             returnOut
@@ -352,10 +387,13 @@ covering
             historyOut,
             streamInvariant,
             returnInvariant = NoReturnInvariant
+            --streamInvariantProof
         }
         effects
         returnOut
-effects >>= function = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
+effects >>= function
+    --= recurseToReturn effects (\mapHistoryIn, mapHistoryOut, mapStreamInvariantProof, value => function value)
+    = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
 
 
 lift :
@@ -378,6 +416,7 @@ fromPurePipe :
             historyIn = overallHistoryIn,
             historyOut = overallHistoryOut,
             returnInvariant = overallReturnInvariant
+            --streamInvariantProof = overallStreamInvariantProof
         }
         Identity
         returnOut
@@ -390,6 +429,7 @@ fromPurePipe :
             historyIn = overallHistoryIn,
             historyOut = overallHistoryOut,
             returnInvariant = overallReturnInvariant
+            --streamInvariantProof = overallStreamInvariantProof
         } effects returnOut
 fromPurePipe pipe = recurse pipe where
     recurse :
@@ -402,6 +442,7 @@ fromPurePipe pipe = recurse pipe where
                 historyIn = innerHistoryIn,
                 historyOut = innerHistoryOut,
                 returnInvariant = innerReturnInvariant
+                --streamInvariantProof = innerStreamInvariantProof
             }
             Identity
             returnOut
@@ -415,13 +456,15 @@ fromPurePipe pipe = recurse pipe where
                 historyIn = innerHistoryIn,
                 historyOut = innerHistoryOut,
                 returnInvariant = innerReturnInvariant
+                --streamInvariantProof = innerStreamInvariantProof
             }
             effects
             returnOut
     recurse (Do action) = Do (pure (runIdentity action) >>= \next => lazyPure $ recurse next)
-    recurse (Yield value next) = Yield value (recurse next)
+    recurse (Yield {streamInvariantProof} value next) = Yield {streamInvariantProof} value (recurse next)
     recurse (Await onReturn onStream) = Await
         (\value, upstreamReturnProof => recurse $ onReturn value upstreamReturnProof)
+        --(\value, newStreamInvariantProof => recurse $ onStream value newStreamInvariantProof)
         (\value => recurse $ onStream value)
     recurse (Return value returnInvariantProof) = Return value returnInvariantProof
 
@@ -434,7 +477,10 @@ fromInputExhaustedPipe :
         streamOut
         returnIn
         {
-            isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof
+            isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof,
+            streamInvariant = NoStreamInvariant,
+            returnInvariant
+            --streamInvariantProof = ()
         }
         effects
         returnOut
@@ -443,7 +489,10 @@ fromInputExhaustedPipe :
         streamOut
         returnIn
         {
-            isInputExhausted = No
+            isInputExhausted = No,
+            streamInvariant = NoStreamInvariant,
+            returnInvariant = NoReturnInvariant -- original return invariant is not compatible, so we discard it
+            --streamInvariantProof = ()
         }
         effects
         returnOut
@@ -454,7 +503,10 @@ fromInputExhaustedPipe pipe = recurse pipe where
             streamOut
             returnIn
             {
-                isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof
+                isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof,
+                streamInvariant = NoStreamInvariant,
+                returnInvariant
+                --streamInvariantProof --= ()
             }
             effects
             returnOut
@@ -463,13 +515,142 @@ fromInputExhaustedPipe pipe = recurse pipe where
             streamOut
             returnIn
             {
-                isInputExhausted = No
+                isInputExhausted = No,
+                streamInvariant = NoStreamInvariant,
+                returnInvariant = NoReturnInvariant
+                --streamInvariantProof --=()
             }
             effects
             returnOut
     recurse (Do action) = Do (action >>= \next => lazyPure $ recurse next)
+    --recurse (Yield {streamInvariantProof = newStreamInvariantProof} value next) = Yield {streamInvariantProof} value (recurse {streamInvariantProof = newStreamInvariantProof} next)
+    --recurse (Yield {streamInvariantProof = newStreamInvariantProof} value next) = ?todofrominputexhausted--Yield {oldStreamInvariantProof = streamInvariantProof} value (recurse {streamInvariantProof = newStreamInvariantProof} next)
+    --recurse (Yield {streamInvariantProof} value next) = Yield {oldStreamInvariantProof = streamInvariantProof} value (recurse {streamInvariantProof} next)
     recurse (Yield value next) = Yield value (recurse next)
-    recurse (Return value returnInvariantProof) = Return value returnInvariantProof
+    recurse (Return value returnInvariantProof) = Return value ()
+
+
+record ErasedDPair {0 a: Type} {0 b: a -> Type} where
+    constructor MkErasedDPair
+    0 fst : a
+    0 snd : b fst
+
+
+IsInputExhaustedContainsUpstreamReturnProof :
+    --(returnOut: Type)
+    (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
+    -> (historyIn: List streamIn)
+    -> (historyOut: List streamOut)
+    -> IsInputExhausted
+    -> IsInputExhausted
+    -> Type
+IsInputExhaustedContainsUpstreamReturnProof {-returnOut-} returnInvariant historyIn historyOut isUpstreamInputExhausted No = ()
+IsInputExhaustedContainsUpstreamReturnProof {-returnOut-} returnInvariant historyIn historyOut isUpstreamInputExhausted (Yes property _)
+    = ErasedDPair
+        {a = returnOut}
+        {b = \finalReturnOut
+            => property = returnInvariant isUpstreamInputExhausted historyIn historyOut finalReturnOut
+        }
+    --= Exists {type = returnOut} $ \finalReturnOut
+    --    => property = returnInvariant isInputExhausted historyIn historyOut finalReturnOut
+    --= (finalReturnOut: returnOut
+    --    ** property = returnInvariant isInputExhausted historyIn historyOut finalReturnOut)
+
+
+composeStreamInvariants :
+    (List streamIn -> List streamMid -> Type)
+    -> (List streamMid -> List streamOut -> Type)
+    -> List streamIn
+    -> List streamOut
+    -> Type
+composeStreamInvariants streamInvariantUpstream streamInvariantDownstream currentHistoryIn currentHistoryOut
+    = Exists $ \currentHistoryMid => (
+        streamInvariantUpstream currentHistoryIn currentHistoryMid,
+        streamInvariantDownstream currentHistoryMid currentHistoryOut
+    )
+
+
+composeReturnInvariants :
+    (IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
+    -> (IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
+    -> (IsInputExhausted)
+    -> List streamIn
+    -> List streamOut
+    -> returnOut
+    -> Type
+composeReturnInvariants
+    returnInvariantUpstream
+    returnInvariantDownstream
+    finalIsInputExhaustedIn
+    finalHistoryIn
+    finalHistoryOut
+    finalReturnOut
+    = Exists
+        {
+            type = (IsInputExhausted, List streamMid)
+        }
+        $ \(finalIsInputExhaustedMid, finalHistoryMid) => (
+            returnInvariantDownstream
+                finalIsInputExhaustedMid
+                finalHistoryMid
+                finalHistoryOut
+                finalReturnOut,
+            ErasedDPair
+                {
+                    a = IsInputExhaustedContainsUpstreamReturnProof
+                        returnInvariantUpstream
+                        finalHistoryIn
+                        finalHistoryMid
+                        finalIsInputExhaustedIn
+                        finalIsInputExhaustedMid
+                }
+                {
+                    b = \finalIsInputExhaustedMidContainsUpstreamReturnProof =>
+                        case finalIsInputExhaustedMid of
+                            No => ()
+                            Yes _ _ =>
+                                let finalReturnMid = fst finalIsInputExhaustedMidContainsUpstreamReturnProof in
+                                    returnInvariantUpstream
+                                        finalIsInputExhaustedIn
+                                        finalHistoryIn
+                                        finalHistoryMid
+                                        finalReturnMid
+                }
+            --case finalIsInputExhaustedMid of
+            --    No => ()
+            --    Yes property propertyProof => 
+
+            -- Exists {type = returnMid} $ \finalReturnMid => case finalIsInputExhaustedMid of
+            --     No => ()
+            --     Yes _ _ =>
+            --         returnInvariantUpstream
+            --             finalIsInputExhaustedIn
+            --             finalHistoryIn
+            --             finalHistoryMid
+            --             finalReturnMid
+
+            --Exists
+            --    {
+            --        type = IsInputExhaustedContainsUpstreamReturnProof
+            --            returnInvariantUpstream
+            --            finalHistoryIn
+            --            finalHistoryMid
+            --            finalIsInputExhaustedMid
+            --    }
+            --    $ \(Evidence finalReturnMid _) => case finalIsInputExhaustedMid of
+            --        No => ()
+            --        Yes _ _ =>
+            --            returnInvariantUpstream
+            --                finalIsInputExhaustedIn
+            --                finalHistoryIn
+            --                finalHistoryMid
+            --                finalReturnMid
+        )
+
+
+testeq : (y: (x: Type ** x)) -> (Nat = fst y) -> Nat
+--testeq (a ** b) c = b
+testeq (a ** b) c = rewrite c in b
 
 
 infixr 9 .|
@@ -485,7 +666,9 @@ covering --todo totality
             isInputExhausted = isInputExhaustedIn,
             historyIn,
             historyOut = historyMid,
-            returnInvariant = returnInvariantA
+            streamInvariant = streamInvariantUpstream,
+            returnInvariant = returnInvariantUpstream
+            --streamInvariantProof = streamInvariantProofUpstream
         }
         effects
         returnMid
@@ -494,10 +677,12 @@ covering --todo totality
         streamOut
         returnMid
         {
-            isInputExhausted = isInputExhaustedMid,
+            isInputExhausted = No,
             historyIn = historyMid,
             historyOut,
-            returnInvariant = returnInvariantB
+            streamInvariant = streamInvariantDownstream,
+            returnInvariant = returnInvariantDownstream
+            --streamInvariantProof = streamInvariantProofDownstream
         }
         effects
         returnOut
@@ -509,14 +694,30 @@ covering --todo totality
             isInputExhausted = isInputExhaustedIn,
             historyIn,
             historyOut,
-            returnInvariant = NoReturnInvariant
+            streamInvariant = NoStreamInvariant, -- Too hard and messy for now, since it's not something that's always satisfied
+            --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
+            returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+            --streamInvariantProof = Evidence historyMid (steamInvariantProofUpstream, streamInvariantProofDownstream)
+            --returnInvariant = \finalIsInputExhaustedIn, finalHistoryIn, finalReturnOut =>
+            --    (finalIsInputExhaustedMid: IsInputExhausted
+            --        ** (
+            --            finalHistoryMid: List streamMid
+            --            ** (
+            --                returnInvariantB finalIsInputExhaustedMid finalHistoryMid finalReturnOut,
+            --                streamInvariantMid finalHistoryIn finalHistoryMid,
+            --                case finalIsInputExhaustedMid of
+            --                    No => ()
+            --                    Yes _ _ => returnInvariantA finalIsInputExhaustedIn finalHistoryIn finalHistoryMid finalReturnMid -- todo looks like maybe we dont care about IsInputExhausted proofs
+            --            )
+            --        )
+            --    )
         }
         effects
         returnOut
     --newInvariant = \finalHistoryIn, returnValue =>
     --  Exists (List streamMid) \historyMid => 
     --      (returnInvariantB historyMid returnValue, streamInvariantA finalHistoryIn historyMid)
-(.|) = pull where
+(.|) = pull {midExhaustedContainsUpstreamReturnProof = ()} {-{pullStreamInvariantProofUpstream = ?todobasecase}-} where
     mutual
         pull : 
             Monad effects'
@@ -524,6 +725,24 @@ covering --todo totality
             -> {0 pullIsInputExhaustedMid: IsInputExhausted}
             -> {0 pullHistoryIn: List streamIn}
             -> {0 pullHistoryMid: List streamMid}
+            ---> {0 streamInvariantProofUpstream: streamInvariantUpstream pullHistoryIn pullHistoryMid}
+            ---> {0 streamInvariantProofDownstream: streamInvariantDownstream pullHistoryMid pullHistoryMid}
+            ---> {0 pullStreamInvariantProofUpstream: streamInvariantUpstream pullHistoryIn pullHistoryMid}
+            ---> {0 pullStreamInvariantProofDownstream: streamInvariantDownstream pullHistoryMid pullHistoryOut}
+            -> {0 midExhaustedContainsUpstreamReturnProof:
+                IsInputExhaustedContainsUpstreamReturnProof
+                    returnInvariantUpstream
+                    pullHistoryIn
+                    pullHistoryMid
+                    pullIsInputExhaustedIn
+                    pullIsInputExhaustedMid
+            }
+            -- -> {0 midExhaustedContainsUpstreamReturnProof: case pullIsInputExhaustedMid of
+            --    No => ()
+            --    Yes property _ =>
+            --        (finalReturnMid: returnMid
+            --            ** property = returnInvariantUpstream pullIsInputExhaustedIn pullHistoryIn pullHistoryMid finalReturnMid)
+            -- }
             -> Pipe
                 streamIn
                 streamMid
@@ -532,7 +751,9 @@ covering --todo totality
                     isInputExhausted = pullIsInputExhaustedIn,
                     historyIn = pullHistoryIn,
                     historyOut = pullHistoryMid,
-                    returnInvariant = returnInvariantA
+                    streamInvariant = streamInvariantUpstream,
+                    returnInvariant = returnInvariantUpstream
+                    --streamInvariantProof = pullStreamInvariantProofUpstream
                 }
                 effects'
                 returnMid
@@ -544,7 +765,9 @@ covering --todo totality
                     isInputExhausted = pullIsInputExhaustedMid,
                     historyIn = pullHistoryMid,
                     historyOut = pullHistoryOut,
-                    returnInvariant = returnInvariantB
+                    streamInvariant = streamInvariantDownstream,
+                    returnInvariant = returnInvariantDownstream
+                    --streamInvariantProof = pullStreamInvariantProofDownstream
                 }
                 effects'
                 returnOut
@@ -556,24 +779,81 @@ covering --todo totality
                     isInputExhausted = pullIsInputExhaustedIn,
                     historyIn = pullHistoryIn,
                     historyOut = pullHistoryOut,
-                    returnInvariant = NoReturnInvariant
+                    --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
+                    streamInvariant = NoStreamInvariant,
+                    returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+                    --streamInvariantProof = Evidence pullHistoryMid (pullStreamInvariantProofUpstream, pullStreamInvariantProofDownstream)
                 }
                 effects'
                 returnOut
         pull upstream (Do action)
-            = Do (action >>= \nextDownstreamPipe => lazyPure (pull upstream nextDownstreamPipe))
-        pull upstream (Yield value downstreamNext)
-            = Yield value (pull upstream downstreamNext)
+            -- {
+            --     streamInvariantProofUpstream,
+            --     midExhaustedContainsUpstreamReturnProof
+            -- }
+            = Do (action >>= \nextDownstreamPipe => lazyPure (pull
+                {
+                    --streamInvariantProofUpstream,
+                    midExhaustedContainsUpstreamReturnProof
+                }
+                upstream
+                nextDownstreamPipe
+            ))
+        pull upstream (Yield {streamInvariantProof = newStreamInvariantProofDownstream} value downstreamNext)
+            --  {
+            --      streamInvariantProofUpstream,
+            --      pullHistoryMid
+            --  }
+            = Yield
+                value
+                -- {
+                --     streamInvariantProof = Evidence pullHistoryMid (pullStreamInvariantProofUpstream, newStreamInvariantProofDownstream)
+                -- }
+                (
+                    pull
+                        {
+                            --streamInvariantProofUpstream,
+                            midExhaustedContainsUpstreamReturnProof
+                        }
+                        upstream
+                        downstreamNext
+                )
         pull upstream (Await downstreamOnReturn downstreamOnStream)
+            -- {
+            --     streamInvariantProofUpstream,
+            --     pullHistoryMid
+            -- }
             = push upstream downstreamOnReturn downstreamOnStream
-        pull upstream (Return value returnInvariantProof)
-            = Return value ()
+        pull {pullHistoryMid} upstream (Return value returnInvariantProof)
+            = Return value (Evidence
+                (pullIsInputExhaustedMid, pullHistoryMid)
+                (
+                    returnInvariantProof,
+                    MkErasedDPair
+                        midExhaustedContainsUpstreamReturnProof
+                        (case pullIsInputExhaustedMid of
+                            No => ()
+                            Yes upstreamReturnProperty upstreamReturnProof => rewrite sym (snd midExhaustedContainsUpstreamReturnProof) in upstreamReturnProof
+                            --Yes upstreamReturnProperty upstreamReturnProof => upstreamReturnProof --where
+                            --    finalReturnMid : returnMid
+                            --    finalReturnMid = fst midExhaustedContainsUpstreamReturnProof
+
+                            --    upstreamReturnInvariantProof : returnInvariantUpstream pullIsInputExhaustedIn pullHistoryIn pullHistoryMid finalHistoryMid
+                            --    upstreamReturnInvariantProof = rewrite snd midExhaustedContainsUpstreamReturnProof in upstreamReturnProof
+                            --)
+                        )
+                        --?todostreamInvariantProofUpstream
+                )
+            )
 
         push :
             Monad effects'
             => {0 pushIsInputExhaustedIn: IsInputExhausted}
             -> {0 pushHistoryIn: List streamIn}
             -> {0 pushHistoryMid: List streamMid}
+            -- -> {0 streamInvariantProofDownstream: streamInvariantDownstream pushHistoryMid pushHistoryOut}
+            ---> {0 pushStreamInvariantProofUpstream: streamInvariantUpstream pushHistoryIn pushHistoryMid}
+            ---> {0 pushStreamInvariantProofDownstream: streamInvariantDownstream pushHistoryMid pushHistoryOut}
             -> Pipe
                 streamIn
                 streamMid
@@ -582,7 +862,9 @@ covering --todo totality
                     isInputExhausted = pushIsInputExhaustedIn,
                     historyIn = pushHistoryIn,
                     historyOut = pushHistoryMid,
-                    returnInvariant = returnInvariantA
+                    streamInvariant = streamInvariantUpstream,
+                    returnInvariant = returnInvariantUpstream
+                    --streamInvariantProof = pushStreamInvariantProofUpstream
                 }
                 effects'
                 returnMid
@@ -597,12 +879,15 @@ covering --todo totality
                         isInputExhausted = Yes upstreamReturnProperty upstreamReturnProof,
                         historyIn = pushHistoryMid,
                         historyOut = pushHistoryOut,
-                        returnInvariant = returnInvariantB
+                        streamInvariant = streamInvariantDownstream,
+                        returnInvariant = returnInvariantDownstream
+                        --streamInvariantProof = pushStreamInvariantProofDownstream
                     }
                     effects'
                     returnOut
                 ))
             -> ((value: streamMid)
+                ---> (0 newStreamInvariantProof : streamInvariantDownstream (value :: pushHistoryMid) pushHistoryOut)
                 -> Inf (Pipe
                     streamMid
                     streamOut
@@ -611,7 +896,9 @@ covering --todo totality
                         isInputExhausted = No,
                         historyIn = value :: pushHistoryMid,
                         historyOut = pushHistoryOut,
-                        returnInvariant = returnInvariantB
+                        streamInvariant = streamInvariantDownstream,
+                        returnInvariant = returnInvariantDownstream
+                        --streamInvariantProof = newStreamInvariantProof
                     }
                     effects'
                     returnOut))
@@ -623,20 +910,35 @@ covering --todo totality
                     isInputExhausted = pushIsInputExhaustedIn,
                     historyIn = pushHistoryIn,
                     historyOut = pushHistoryOut,
-                    returnInvariant = NoReturnInvariant
+                    --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
+                    streamInvariant = NoStreamInvariant,
+                    returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+                    --streamInvariantProof = Evidence pushHistoryMid (pushStreamInvariantProofUpstream, pushStreamInvariantProofDownstream)
                 }
                 effects'
                 returnOut
         push (Do action) downstreamOnReturn downstreamOnStream
             = Do (action >>= \nextUpstreamPipe => lazyPure (push nextUpstreamPipe downstreamOnReturn downstreamOnStream))
+        --push (Yield {streamInvariantProof = newStreamInvariantProofUpstream} value upstreamNext) downstreamOnReturn downstreamOnStream
+            --= pull {pullStreamInvariantProofUpstream = newStreamInvariantProofUpstream} upstreamNext (downstreamOnStream value)
         push (Yield value upstreamNext) downstreamOnReturn downstreamOnStream
-            = pull upstreamNext (downstreamOnStream value)
+            = pull
+                {midExhaustedContainsUpstreamReturnProof = ()}
+                upstreamNext
+                (downstreamOnStream value)
         push (Await upstreamOnReturn upstreamOnStream) downstreamOnReturn downstreamOnStream
             = Await
                 (\value, upstreamReturnProof => push (upstreamOnReturn value upstreamReturnProof) downstreamOnReturn downstreamOnStream)
                 (\value => push (upstreamOnStream value) downstreamOnReturn downstreamOnStream)
         push (Return value returnInvariantProof) downstreamOnReturn downstreamOnStream
-            = pull (Return value returnInvariantProof) (downstreamOnReturn value returnInvariantProof)
+            = pull
+                {
+                    pullIsInputExhaustedIn = pushIsInputExhaustedIn,
+                    pullIsInputExhaustedMid = Yes _ returnInvariantProof,
+                    midExhaustedContainsUpstreamReturnProof = MkErasedDPair value Refl
+                }
+                (Return value returnInvariantProof)
+                (downstreamOnReturn value returnInvariantProof)
 
 
 yield :
@@ -651,10 +953,13 @@ yield :
             historyIn,
             historyOut,
             streamInvariant
+            --streamInvariantProof
         }
         effects
         ()
 yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return () ()) -- We set Return () as the initial continuation, which can then be built upon monadically
+--yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return () ()) -- We set Return () as the initial continuation, which can then be built upon monadically
+--yield value = Yield value (Return () ()) -- We set Return () as the initial continuation, which can then be built upon monadically
 
 
 Effect :
@@ -909,7 +1214,7 @@ splitByEmptyLine :
         {
             isInputExhausted = No,
             historyIn = [],
-            returnInvariant = NoReturnInvariant
+            returnInvariant
         }
         effects
         splitReturnOut
@@ -937,7 +1242,7 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe No initialInnerPipeline whe
                 isInputExhausted,
                 historyIn = innerHistoryIn,
                 historyOut = innerHistoryOut,
-                returnInvariant = NoReturnInvariant
+                returnInvariant = innerReturnInvariant -- Allow the inner return invariant to change as we could be dropping it
             }
             effects
             splitReturnOut
