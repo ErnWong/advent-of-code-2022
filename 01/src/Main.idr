@@ -30,6 +30,17 @@ NoReturnInvariant : IsInputExhausted -> List streamIn -> List streamOut -> retur
 NoReturnInvariant _ _ _ _ = ()
 
 
+ExhaustsInputAnd :
+    (List streamIn -> List streamOut -> returnOut -> Type)
+    -> IsInputExhausted
+    -> List streamIn
+    -> List streamOut
+    -> returnOut
+    -> Type
+ExhaustsInputAnd otherReturnInvariant No _ _ _ = Void
+ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue = otherReturnInvariant historyIn historyOut returnValue
+
+
 ||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
 ||| Extensions to IdrisPipes: We now index by history (erased at runtime) and an invariant
 ||| so we can reason about some properties of what a pipe outputs.
@@ -1150,7 +1161,8 @@ foldPipe :
         {
             isInputExhausted = No,
             historyIn = [],
-            returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
+            historyOut = [],
+            returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
                 => finalReturn = foldr reducer initialValue finalHistoryIn
         }
         Identity
@@ -1171,7 +1183,8 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
             {
                 isInputExhausted = No,
                 historyIn,
-                returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
+                historyOut = [],
+                returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
                     => finalReturn = foldr reducer initialValue finalHistoryIn
             }
             Identity
@@ -1191,7 +1204,8 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
                     {
                         isInputExhausted = No,
                         historyIn = (value :: historyIn),
-                        returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
+                        historyOut = [],
+                        returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
                             => finalReturn = foldr reducer initialValue finalHistoryIn
                     }
                     Identity
@@ -1337,7 +1351,7 @@ sum :
             isInputExhausted = No,
             historyIn = [],
             historyOut = [],
-            returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
+            returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
                 => finalReturn = foldr (+) 0 finalHistoryIn
         }
         effects
@@ -1356,7 +1370,7 @@ max :
             isInputExhausted = No,
             historyIn = [],
             historyOut = [],
-            returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturn
+            returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
                 => finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn
         }
         effects
