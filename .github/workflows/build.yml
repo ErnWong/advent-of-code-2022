@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: 01
+        working-directory: "./01"
     steps:
     - uses: actions/checkout@v3
     - uses: cachix/install-nix-action@v18
