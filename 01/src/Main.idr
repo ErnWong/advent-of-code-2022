@@ -22,6 +22,10 @@ data IsInputExhausted : Type where
     Yes : (0 upstreamReturnProperty: Type) -> (0 upstreamReturnProof: upstreamReturnProperty) -> IsInputExhausted
 
 
+noIsNeverYes : (No = Yes _ _) -> Void
+noIsNeverYes Refl impossible
+
+
 NoStreamInvariant : List streamIn -> List streamOut -> Type
 NoStreamInvariant _ _ = ()
 
@@ -547,6 +551,22 @@ record ErasedDPair {0 a: Type} {0 b: a -> Type} where
     0 snd : b fst
 
 
+--data IsInputExhaustedContainsUpstreamReturnProof :
+--        (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
+--        -> (historyIn: List streamIn)
+--        -> (historyOut: List streamOut)
+--        -> IsInputExhausted
+--        -> IsInputExhausted
+--        -> Type
+--        where
+--    ButInputIsntExhausted :
+--        (0 proofNotExhausted: isUpstreamInputExhausted = No)
+--        -> IsInputExhaustedContainsUpstreamReturnProof
+--    WeHaveUpstreamReturnProof :
+--        (0 returnValue: returnOut)
+--        -> (0 containsProof: isUpstreamInputExhausted = )
+
+
 IsInputExhaustedContainsUpstreamReturnProof :
     --(returnOut: Type)
     (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
@@ -568,6 +588,39 @@ IsInputExhaustedContainsUpstreamReturnProof {-returnOut-} returnInvariant histor
     --    ** property = returnInvariant isInputExhausted historyIn historyOut finalReturnOut)
 
 
+data ErasedThing : (0 a: Type) -> Type where
+    MkErasedThing : (0 thing: a) -> ErasedThing a
+
+
+upstreamReturnProofFromInputExhausted :
+    {0 returnInvariant: IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type}
+    -> {0 historyIn: List streamIn}
+    -> {0 historyMid: List streamMid}
+    -> {0 isInputExhaustedIn: IsInputExhausted}
+    -> (isInputExhaustedMid: IsInputExhausted)
+    -> (containsUpstreamReturnProof: IsInputExhaustedContainsUpstreamReturnProof returnInvariant historyIn historyMid isInputExhaustedIn isInputExhaustedMid)
+    -> (proofThatWeDidExhaust: Exists $ \property => Exists $ \returnProof => (isInputExhaustedMid = Yes property returnProof))
+    ---> ErasedThing (returnInvariant isInputExhaustedIn historyIn historyMid (ErasedDPair.fst containsUpstreamReturnProof))
+    -> ErasedThing $ ErasedDPair
+        {
+            a = returnMid,
+            b = \finalReturnMid => returnInvariant isInputExhaustedIn historyIn historyMid finalReturnMid
+        }
+upstreamReturnProofFromInputExhausted isInputExhaustedMid@No _ proofThatWeDidExhaust = void $ noIsNeverYes $
+    (the (No = isInputExhaustedMid) Refl)
+    `trans`
+    (the (isInputExhaustedMid = Yes _ _) (snd $ snd proofThatWeDidExhaust))
+upstreamReturnProofFromInputExhausted (Yes property returnProof) containsUpstreamReturnProof _ = MkErasedThing $ MkErasedDPair
+    (fst containsUpstreamReturnProof)
+    (
+        rewrite
+            the (returnInvariant isInputExhaustedIn historyIn historyMid (fst containsUpstreamReturnProof) = property)
+                $ sym $ snd containsUpstreamReturnProof
+        in
+            returnProof
+    )
+
+
 composeStreamInvariants :
     (List streamIn -> List streamMid -> Type)
     -> (List streamMid -> List streamOut -> Type)
@@ -579,6 +632,7 @@ composeStreamInvariants streamInvariantUpstream streamInvariantDownstream curren
         streamInvariantUpstream currentHistoryIn currentHistoryMid,
         streamInvariantDownstream currentHistoryMid currentHistoryOut
     )
+
 
 %prefix_record_projections off
 record ComposedReturnProof
@@ -593,8 +647,8 @@ record ComposedReturnProof
     (returnOutValue : returnOut)
     where
         constructor MkComposedReturnProof
-        0 hackIsInputExhaustedIn: IsInputExhausted
-        0 hackIsInputExhaustedInEq: hackIsInputExhaustedIn = isInputEhaustedIn
+        --0 hackIsInputExhaustedIn: IsInputExhausted
+        --0 hackIsInputExhaustedInEq: hackIsInputExhaustedIn = isInputEhaustedIn
         0 isInputExhaustedMid: IsInputExhausted
         0 historyMid: List streamMid
         0 downstreamProof: returnInvariantDownstream isInputExhaustedMid historyMid historyOut returnOutValue
@@ -878,8 +932,8 @@ covering --todo totality
             = push upstream downstreamOnReturn downstreamOnStream
         pull {pullHistoryMid} upstream (Return value returnInvariantProof)
             = Return value $ MkComposedReturnProof {
-                hackIsInputExhaustedIn = pullIsInputExhaustedIn,
-                hackIsInputExhaustedInEq = Refl,
+                --hackIsInputExhaustedIn = pullIsInputExhaustedIn,
+                --hackIsInputExhaustedInEq = Refl,
                 isInputExhaustedMid = pullIsInputExhaustedMid,
                 historyMid = pullHistoryMid,
                 downstreamProof = returnInvariantProof,
@@ -1429,7 +1483,22 @@ runInputExhaustingPurePipeWithList pipe list =
         --    in
         --        proofs.upstreamProof
 
+        --0 abcdef : ?todoaabzxcadkl
+        --abcdef = upstreamReturnProofFromInputExhausted
+        --        proofs.isInputExhaustedMid
+        --        proofs.midExhaustedContainsUpstreamReturnProof
+        --        midIsExhausted
+
+
         0 proofThatReverseOfHistoryMidEqualsList : reverse proofs.historyMid = list
+        proofThatReverseOfHistoryMidEqualsList =
+            let
+                MkErasedThing returnProofPair = upstreamReturnProofFromInputExhausted
+                    proofs.isInputExhaustedMid
+                    proofs.midExhaustedContainsUpstreamReturnProof
+                    midIsExhausted
+            in
+                snd $ returnProofPair
         ----proofThatReverseOfHistoryMidEqualsList = Refl
         ----    rewrite
         ----        inputExhaustedGivesUpstreamReturnInvariant (snd $ snd midIsExhausted)
