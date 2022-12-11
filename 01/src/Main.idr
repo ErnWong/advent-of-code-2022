@@ -17,6 +17,24 @@ import System.File.Virtual
 %default total
 
 
+reverseCanJumpAcrossTheEqualsSign :
+    (xs, ys : List a)
+    -> reverse xs = ys
+    -> xs = reverse ys
+reverseCanJumpAcrossTheEqualsSign xs ys reverseOnTheLeft =
+    let
+        reverseItself : (reverse (reverse xs) = reverse (reverse xs))
+        reverseItself = Refl
+
+        applyReverseToBothSides : reverse (reverse xs) = reverse ys
+        applyReverseToBothSides = rewrite sym reverseOnTheLeft in reverseItself
+
+        twoReversesOnTheLeftCancelsOut : xs = reverse ys
+        twoReversesOnTheLeftCancelsOut = rewrite sym $ reverseInvolutive xs in applyReverseToBothSides
+    in
+        twoReversesOnTheLeftCancelsOut
+
+
 data IsInputExhausted : Type where
     No : IsInputExhausted
     Yes : (0 upstreamReturnProperty: Type) -> (0 upstreamReturnProof: upstreamReturnProperty) -> IsInputExhausted
@@ -1575,6 +1593,8 @@ runInputExhaustingPurePipeWithList pipe list =
         --            )
 
         0 proofThatHistoryMidEqualsReverseOfList : proofs.historyMid = reverse list
+        proofThatHistoryMidEqualsReverseOfList
+            = reverseCanJumpAcrossTheEqualsSign proofs.historyMid list proofThatReverseOfHistoryMidEqualsList
 
         0 finalProof : returnInvariant (reverse list) [] returnValue
         finalProof = rewrite sym proofThatHistoryMidEqualsReverseOfList in downstreamReturnInvariantProof
@@ -1601,7 +1621,6 @@ runInputExhaustingPurePipeWithList pipe list =
 --testMyUse2 = Builtin.snd $ snd testMyErased
 
 
-{-
 covering
 mapEach :
     Monad effects
@@ -1875,5 +1894,3 @@ main : IO ()
 main = run $ handle app
     (\() => putStr "Ok")
     (\error : IOError => putStr "Error")
-
--}
