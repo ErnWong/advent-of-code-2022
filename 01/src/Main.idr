@@ -580,81 +580,109 @@ composeStreamInvariants streamInvariantUpstream streamInvariantDownstream curren
         streamInvariantDownstream currentHistoryMid currentHistoryOut
     )
 
+%prefix_record_projections off
+record ComposedReturnProof
+    {0 streamIn: Type}
+    {0 streamMid: Type}
+    {0 returnMid: Type}
+    (returnInvariantUpstream: IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
+    (returnInvariantDownstream: IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
+    (isInputExhaustedIn : IsInputExhausted)
+    (historyIn : List streamIn)
+    (historyOut : List streamOut)
+    (returnOutValue : returnOut)
+    where
+        constructor MkComposedReturnProof
+        0 hackIsInputExhaustedIn: IsInputExhausted
+        0 hackIsInputExhaustedInEq: hackIsInputExhaustedIn = isInputEhaustedIn
+        0 isInputExhaustedMid: IsInputExhausted
+        0 historyMid: List streamMid
+        0 downstreamProof: returnInvariantDownstream isInputExhaustedMid historyMid historyOut returnOutValue
+        0 midExhaustedContainsUpstreamReturnProof: IsInputExhaustedContainsUpstreamReturnProof returnInvariantUpstream historyIn historyMid isInputEhaustedIn isInputExhaustedMid
 
-composeReturnInvariants :
-    (IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
-    -> (IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
-    -> (IsInputExhausted)
-    -> List streamIn
-    -> List streamOut
-    -> returnOut
-    -> Type
-composeReturnInvariants
-    returnInvariantUpstream
-    returnInvariantDownstream
-    finalIsInputExhaustedIn
-    finalHistoryIn
-    finalHistoryOut
-    finalReturnOut
-    = Exists {type = IsInputExhausted} $ \finalIsInputExhaustedMid
-        => Exists {type = List streamMid} $ \finalHistoryMid => (
-            returnInvariantDownstream
-                finalIsInputExhaustedMid
-                finalHistoryMid
-                finalHistoryOut
-                finalReturnOut,
-            ErasedDPair
-                {
-                    a = IsInputExhaustedContainsUpstreamReturnProof
-                        returnInvariantUpstream
-                        finalHistoryIn
-                        finalHistoryMid
-                        finalIsInputExhaustedIn
-                        finalIsInputExhaustedMid
-                }
-                {
-                    b = \finalIsInputExhaustedMidContainsUpstreamReturnProof =>
-                        case finalIsInputExhaustedMid of
-                            No => ()
-                            Yes _ _ =>
-                                --let finalReturnMid = fst finalIsInputExhaustedMidContainsUpstreamReturnProof in
-                                    returnInvariantUpstream
-                                        finalIsInputExhaustedIn
-                                        finalHistoryIn
-                                        finalHistoryMid
-                                        --finalReturnMid
-                                        (fst finalIsInputExhaustedMidContainsUpstreamReturnProof)
-                }
-            --case finalIsInputExhaustedMid of
-            --    No => ()
-            --    Yes property propertyProof => 
+        -- Had lots of trouble trying to extract the following out later on, so going to a different approach:
+        --0 returnMidValue: case isInputExhaustedMid of
+        --    No => ()
+        --    Yes a b => returnMid -- Why won't underscores work here? Error: While processing type of .upstreamProof. Can't match on ?postpone [no locals in scope] (Not a constructor application or primitive).id
+        --0 upstreamProof: case isInputExhaustedMid of
+        --    No => ()
+        --    Yes a b => returnInvariantUpstream isInputExhaustedIn historyIn historyMid returnMidValue
 
-            -- Exists {type = returnMid} $ \finalReturnMid => case finalIsInputExhaustedMid of
-            --     No => ()
-            --     Yes _ _ =>
-            --         returnInvariantUpstream
-            --             finalIsInputExhaustedIn
-            --             finalHistoryIn
-            --             finalHistoryMid
-            --             finalReturnMid
 
-            --Exists
-            --    {
-            --        type = IsInputExhaustedContainsUpstreamReturnProof
-            --            returnInvariantUpstream
-            --            finalHistoryIn
-            --            finalHistoryMid
-            --            finalIsInputExhaustedMid
-            --    }
-            --    $ \(Evidence finalReturnMid _) => case finalIsInputExhaustedMid of
-            --        No => ()
-            --        Yes _ _ =>
-            --            returnInvariantUpstream
-            --                finalIsInputExhaustedIn
-            --                finalHistoryIn
-            --                finalHistoryMid
-            --                finalReturnMid
-        )
+--composeReturnInvariants :
+--    (IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
+--    -> (IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
+--    -> (IsInputExhausted)
+--    -> List streamIn
+--    -> List streamOut
+--    -> returnOut
+--    -> Type
+--composeReturnInvariants
+--    returnInvariantUpstream
+--    returnInvariantDownstream
+--    finalIsInputExhaustedIn
+--    finalHistoryIn
+--    finalHistoryOut
+--    finalReturnOut
+--    = Exists {type = IsInputExhausted} $ \finalIsInputExhaustedMid
+--        => Exists {type = List streamMid} $ \finalHistoryMid => (
+--            returnInvariantDownstream
+--                finalIsInputExhaustedMid
+--                finalHistoryMid
+--                finalHistoryOut
+--                finalReturnOut,
+--            ErasedDPair
+--                {
+--                    a = IsInputExhaustedContainsUpstreamReturnProof
+--                        returnInvariantUpstream
+--                        finalHistoryIn
+--                        finalHistoryMid
+--                        finalIsInputExhaustedIn
+--                        finalIsInputExhaustedMid
+--                }
+--                {
+--                    b = \finalIsInputExhaustedMidContainsUpstreamReturnProof =>
+--                        case finalIsInputExhaustedMid of
+--                            No => ()
+--                            Yes _ _ =>
+--                                --let finalReturnMid = fst finalIsInputExhaustedMidContainsUpstreamReturnProof in
+--                                    returnInvariantUpstream
+--                                        finalIsInputExhaustedIn
+--                                        finalHistoryIn
+--                                        finalHistoryMid
+--                                        --finalReturnMid
+--                                        (fst finalIsInputExhaustedMidContainsUpstreamReturnProof)
+--                }
+--            --case finalIsInputExhaustedMid of
+--            --    No => ()
+--            --    Yes property propertyProof => 
+--
+--            -- Exists {type = returnMid} $ \finalReturnMid => case finalIsInputExhaustedMid of
+--            --     No => ()
+--            --     Yes _ _ =>
+--            --         returnInvariantUpstream
+--            --             finalIsInputExhaustedIn
+--            --             finalHistoryIn
+--            --             finalHistoryMid
+--            --             finalReturnMid
+--
+--            --Exists
+--            --    {
+--            --        type = IsInputExhaustedContainsUpstreamReturnProof
+--            --            returnInvariantUpstream
+--            --            finalHistoryIn
+--            --            finalHistoryMid
+--            --            finalIsInputExhaustedMid
+--            --    }
+--            --    $ \(Evidence finalReturnMid _) => case finalIsInputExhaustedMid of
+--            --        No => ()
+--            --        Yes _ _ =>
+--            --            returnInvariantUpstream
+--            --                finalIsInputExhaustedIn
+--            --                finalHistoryIn
+--            --                finalHistoryMid
+--            --                finalReturnMid
+--        )
 
 
 --composedProofCanContainUpstreamReturnProof :
@@ -720,7 +748,7 @@ covering --todo totality
             historyOut,
             streamInvariant = NoStreamInvariant, -- Too hard and messy for now, since it's not something that's always satisfied
             --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
-            returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+            returnInvariant = ComposedReturnProof returnInvariantUpstream returnInvariantDownstream
             --streamInvariantProof = Evidence historyMid (steamInvariantProofUpstream, streamInvariantProofDownstream)
             --returnInvariant = \finalIsInputExhaustedIn, finalHistoryIn, finalReturnOut =>
             --    (finalIsInputExhaustedMid: IsInputExhausted
@@ -805,7 +833,7 @@ covering --todo totality
                     historyOut = pullHistoryOut,
                     --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
                     streamInvariant = NoStreamInvariant,
-                    returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+                    returnInvariant = ComposedReturnProof returnInvariantUpstream returnInvariantDownstream
                     --streamInvariantProof = Evidence pullHistoryMid (pullStreamInvariantProofUpstream, pullStreamInvariantProofDownstream)
                 }
                 effects'
@@ -849,26 +877,43 @@ covering --todo totality
             -- }
             = push upstream downstreamOnReturn downstreamOnStream
         pull {pullHistoryMid} upstream (Return value returnInvariantProof)
-            = Return value
-                $ Evidence pullIsInputExhaustedMid
-                    $ Evidence pullHistoryMid
-                        (
-                            returnInvariantProof,
-                            MkErasedDPair
-                                midExhaustedContainsUpstreamReturnProof
-                                (case pullIsInputExhaustedMid of
-                                    No => ()
-                                    Yes upstreamReturnProperty upstreamReturnProof => rewrite sym (snd midExhaustedContainsUpstreamReturnProof) in upstreamReturnProof
-                                    --Yes upstreamReturnProperty upstreamReturnProof => upstreamReturnProof --where
-                                    --    finalReturnMid : returnMid
-                                    --    finalReturnMid = fst midExhaustedContainsUpstreamReturnProof
+            = Return value $ MkComposedReturnProof {
+                hackIsInputExhaustedIn = pullIsInputExhaustedIn,
+                hackIsInputExhaustedInEq = Refl,
+                isInputExhaustedMid = pullIsInputExhaustedMid,
+                historyMid = pullHistoryMid,
+                downstreamProof = returnInvariantProof,
+                midExhaustedContainsUpstreamReturnProof
+                --returnMidValue = case pullIsInputExhaustedMid of
+                --    No => ()
+                --    Yes _ _ => fst midExhaustedContainsUpstreamReturnProof,
+                --upstreamProof = case pullIsInputExhaustedMid of
+                --    No => ()
+                --    Yes upstreamReturnProperty upstreamReturnProof =>
+                --        rewrite
+                --            sym (snd midExhaustedContainsUpstreamReturnProof)
+                --        in
+                --            upstreamReturnProof
+            }
+            --    $ Evidence pullIsInputExhaustedMid
+            --        $ Evidence pullHistoryMid
+            --            (
+            --                returnInvariantProof,
+            --                MkErasedDPair
+            --                    midExhaustedContainsUpstreamReturnProof
+            --                    (case pullIsInputExhaustedMid of
+            --                        No => ()
+            --                        Yes upstreamReturnProperty upstreamReturnProof => rewrite sym (snd midExhaustedContainsUpstreamReturnProof) in upstreamReturnProof
+            --                        --Yes upstreamReturnProperty upstreamReturnProof => upstreamReturnProof --where
+            --                        --    finalReturnMid : returnMid
+            --                        --    finalReturnMid = fst midExhaustedContainsUpstreamReturnProof
 
-                                    --    upstreamReturnInvariantProof : returnInvariantUpstream pullIsInputExhaustedIn pullHistoryIn pullHistoryMid finalHistoryMid
-                                    --    upstreamReturnInvariantProof = rewrite snd midExhaustedContainsUpstreamReturnProof in upstreamReturnProof
-                                    --)
-                                )
-                                --?todostreamInvariantProofUpstream
-                        )
+            --                        --    upstreamReturnInvariantProof : returnInvariantUpstream pullIsInputExhaustedIn pullHistoryIn pullHistoryMid finalHistoryMid
+            --                        --    upstreamReturnInvariantProof = rewrite snd midExhaustedContainsUpstreamReturnProof in upstreamReturnProof
+            --                        --)
+            --                    )
+            --                    --?todostreamInvariantProofUpstream
+            --            )
 
         push :
             Monad effects'
@@ -936,7 +981,7 @@ covering --todo totality
                     historyOut = pushHistoryOut,
                     --streamInvariant = composeStreamInvariants streamInvariantUpstream streamInvariantDownstream,
                     streamInvariant = NoStreamInvariant,
-                    returnInvariant = composeReturnInvariants returnInvariantUpstream returnInvariantDownstream
+                    returnInvariant = ComposedReturnProof returnInvariantUpstream returnInvariantDownstream
                     --streamInvariantProof = Evidence pushHistoryMid (pushStreamInvariantProofUpstream, pushStreamInvariantProofDownstream)
                 }
                 effects'
@@ -1024,6 +1069,16 @@ runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 fromListReturnInvariant : List streamOut -> IsInputExhausted -> List Void -> List streamOut -> () -> Type
 fromListReturnInvariant list _ _ finalHistoryOut _ = reverse finalHistoryOut = list
+
+
+fromListReturnInvariantOnlyDependsOnHistoryOut :
+    (list: List streamOut)
+    -> (historyOut: List streamOut)
+    -> {0 isInputEhaustedIn: IsInputExhausted}
+    -> {0 historyIn: List Void}
+    -> (fromListReturnInvariant list isInputExhaustedIn historyIn historyOut ()
+        = (reverse historyOut = list))
+fromListReturnInvariantOnlyDependsOnHistoryOut list historyOut = Refl
 
 
 covering
@@ -1117,7 +1172,7 @@ runPurePipeWithList :
     ---> Subset returnOut (\returnValue => returnInvariant (Yes () ()) input [] returnValue)
     -> Subset returnOut $
         \returnValue
-            => composeReturnInvariants
+            => ComposedReturnProof
                 {
                     streamIn = Void,
                     returnMid = ()
@@ -1202,45 +1257,45 @@ runInputExhaustingPurePipeWithList pipe list =
         -- Let's unpack the original result so it's easier to see what's going on...
 
         --returnValue : returnOut
-        Element returnValue originalComposedProof = originalResult
+        Element returnValue proofs = originalResult
         --originalComposedProof = snd originalResult
 
-        -- 0 Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) :
-        -- Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) = originalComposedProof
-        --MkPair isInputExhaustedMid historyMid = fst originalComposedProof
+        -- -- 0 Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) :
+        -- -- Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) = originalComposedProof
+        -- --MkPair isInputExhaustedMid historyMid = fst originalComposedProof
 
-        --0 testwhattypethisis : ?todotestwhattype
-        --testwhattypethisis = originalComposedProof
+        -- --0 testwhattypethisis : ?todotestwhattype
+        -- --testwhattypethisis = originalComposedProof
 
-        0 isInputExhaustedMid : IsInputExhausted
-        isInputExhaustedMid = originalComposedProof.fst
+        -- 0 isInputExhaustedMid : IsInputExhausted
+        -- isInputExhaustedMid = originalComposedProof.fst
 
-        0 historyMid : List streamIn
-        historyMid = originalComposedProof.snd.fst
+        -- 0 historyMid : List streamIn
+        -- historyMid = originalComposedProof.snd.fst
 
-        --0 downstreamProof : case isInputExhaustedMid of
-        --    No => Void
-        --    Yes _ _ => returnInvariant historyMid [] returnValue
-        --tricktype : ErasedDPair {a = Type} {b = \a => a}
-        --tricktype = MkErasedDPair {b = snd originalComposedProof}
-        --0 tricktype : a
-        --tricktype = snd originalComposedProof
-        --0 downstreamProof : ?todo--returnInvariant historyMid [] returnValue
-        --0 downstreamProof : (ExhaustsInputAnd returnInvariant) isInputExhausted historyMid [] returnValue
-        --0 downstreamProof : let (finalIsInputExhaustedMid, finalHistoryMid) = fst originalComposedProof in ((ExhaustsInputAnd returnInvariant) finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair)
-        --0 downstreamProof : (ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue, ErasedDPair)
-        --0 downstreamProof : ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue
-        0 downstreamProof : ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue
-        downstreamProof = fst $ snd $ snd originalComposedProof -- TODO why doesn't originalComposedProof.snd.snd.fst work here?
+        -- --0 downstreamProof : case isInputExhaustedMid of
+        -- --    No => Void
+        -- --    Yes _ _ => returnInvariant historyMid [] returnValue
+        -- --tricktype : ErasedDPair {a = Type} {b = \a => a}
+        -- --tricktype = MkErasedDPair {b = snd originalComposedProof}
+        -- --0 tricktype : a
+        -- --tricktype = snd originalComposedProof
+        -- --0 downstreamProof : ?todo--returnInvariant historyMid [] returnValue
+        -- --0 downstreamProof : (ExhaustsInputAnd returnInvariant) isInputExhausted historyMid [] returnValue
+        -- --0 downstreamProof : let (finalIsInputExhaustedMid, finalHistoryMid) = fst originalComposedProof in ((ExhaustsInputAnd returnInvariant) finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair)
+        -- --0 downstreamProof : (ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue, ErasedDPair)
+        -- --0 downstreamProof : ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue
+        -- 0 downstreamProof : ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue
+        -- downstreamProof = fst $ snd $ snd originalComposedProof -- TODO why doesn't originalComposedProof.snd.snd.fst work here?
 
         inputNotExhaustedIsContradiction :
-            (isInputExhaustedMid = No)
-            -> (Void = ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue)
+            (proofs.isInputExhaustedMid = No)
+            -> (Void = ExhaustsInputAnd returnInvariant proofs.isInputExhaustedMid proofs.historyMid [] returnValue)
         inputNotExhaustedIsContradiction ifInputIsntExhausted = rewrite ifInputIsntExhausted in Refl
 
         inputExhaustedGivesDownstreamReturnInvariant :
-            (isInputExhaustedMid = Yes _ _)
-            -> (returnInvariant historyMid [] returnValue = ExhaustsInputAnd returnInvariant isInputExhaustedMid historyMid [] returnValue)
+            (proofs.isInputExhaustedMid = Yes _ _)
+            -> (returnInvariant proofs.historyMid [] returnValue = ExhaustsInputAnd returnInvariant proofs.isInputExhaustedMid proofs.historyMid [] returnValue)
         inputExhaustedGivesDownstreamReturnInvariant ifInputExhausted = rewrite ifInputExhausted in Refl
 
         extractIsInputExhaustedEquality :
@@ -1256,94 +1311,201 @@ runInputExhaustingPurePipeWithList pipe list =
         0 midIsExhausted : 
             (Exists {type = Type} $ \a =>
                 Exists {type = a} $ \b =>
-                    isInputExhaustedMid = Yes a b)
-        midIsExhausted = case (extractIsInputExhaustedEquality isInputExhaustedMid) of
+                    proofs.isInputExhaustedMid = Yes a b)
+        midIsExhausted = case (extractIsInputExhaustedEquality proofs.isInputExhaustedMid) of
             Left proofThatItsNotExhausted => void $
                 rewrite
                     inputNotExhaustedIsContradiction proofThatItsNotExhausted
                 in
-                    downstreamProof
+                    proofs.downstreamProof
             Right proofThatItsExhausted => proofThatItsExhausted
 
-        0 downstreamReturnInvariantProof : returnInvariant historyMid [] returnValue
+        0 downstreamReturnInvariantProof : returnInvariant proofs.historyMid [] returnValue
         downstreamReturnInvariantProof =
             rewrite
                 inputExhaustedGivesDownstreamReturnInvariant (snd $ snd midIsExhausted)
             in
-                downstreamProof
-        --case (extractIsInputExhaustedEquality isInputExhaustedMid) of
-        --    --No => void downstreamProof --absurd downstreamProof--(rewrite the (No = isInputExhaustedMid) Refl in downstreamProof)
-        --    --No => void (rewrite the (isInputExhaustedMid = No) Refl in downstreamProof) --absurd downstreamProof--(rewrite the (No = isInputExhaustedMid) Refl in downstreamProof)
-        --    Left proofThatItsNotExhausted => void $ rewrite inputNotExhaustedIsContradiction proofThatItsNotExhausted in downstreamProof
-        --    Right proofThatItsExhausted => rewrite inputExhaustedGivesReturnInvariant (snd $ snd proofThatItsExhausted) in downstreamProof
+                proofs.downstreamProof
+        -- downstreamReturnInvariantProof =
+        --     rewrite
+        --         inputExhaustedGivesDownstreamReturnInvariant (snd $ snd midIsExhausted)
+        --     in
+        --         downstreamProof
+        -- --case (extractIsInputExhaustedEquality isInputExhaustedMid) of
+        -- --    --No => void downstreamProof --absurd downstreamProof--(rewrite the (No = isInputExhaustedMid) Refl in downstreamProof)
+        -- --    --No => void (rewrite the (isInputExhaustedMid = No) Refl in downstreamProof) --absurd downstreamProof--(rewrite the (No = isInputExhaustedMid) Refl in downstreamProof)
+        -- --    Left proofThatItsNotExhausted => void $ rewrite inputNotExhaustedIsContradiction proofThatItsNotExhausted in downstreamProof
+        -- --    Right proofThatItsExhausted => rewrite inputExhaustedGivesReturnInvariant (snd $ snd proofThatItsExhausted) in downstreamProof
 
-        --0 (Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof)) : _
-        --0 x : _
-        -- aaah, is this a limitation of https://github.com/idris-lang/Idris2/issues/499
-        --Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) = originalComposedProof
+        -- --0 (Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof)) : _
+        -- --0 x : _
+        -- -- aaah, is this a limitation of https://github.com/idris-lang/Idris2/issues/499
+        -- --Evidence (MkPair isInputExhaustedMid historyMid) (MkPair downstreamProof upstreamProof) = originalComposedProof
 
-        --inputExhaustedGivesUpstreamReturnInvariant :
+        -- --inputExhaustedGivesUpstreamReturnInvariant :
+        -- --    (Exists {type = Type} $ \a =>
+        -- --        Exists {type = a} $ \b =>
+        -- --            isInputExhaustedMid = Yes a b)
+        -- --    -> ((reverse historyMid = list)
+        -- --        = case isInputExhaustedMid of
+        -- --            No => ()
+        -- --            Yes _ _ => reverse historyMid = list
+        -- --    )
+        -- inputExhaustedGivesUpstreamReturnInvariant :
+        --     (Exists {type = Type} $ \a =>
+        --         Exists {type = a} $ \b =>
+        --             (fst originalComposedProof) = Yes a b) -- where fst originalComposedProof is isInputExhaustedMid - no idea why using isInputExhaustedMid gives weird type messages
+        --     -> ((reverse historyMid = list)
+        --         = case (fst originalComposedProof) of
+        --             No => ()
+        --             Yes _ _ => reverse historyMid = list
+        --     )
+        -- inputExhaustedGivesUpstreamReturnInvariant ifInputExhausted = rewrite snd $ snd ifInputExhausted in Refl
+        --inputExhaustedGivesUpstreamReturnInvariant : -- Why does this give "inputNotExhaustedIsContradiction is already defined"???
         --    (Exists {type = Type} $ \a =>
         --        Exists {type = a} $ \b =>
-        --            isInputExhaustedMid = Yes a b)
+        --            proofs.isInputExhaustedMid = Yes a b)
         --    -> ((reverse historyMid = list)
-        --        = case isInputExhaustedMid of
+        --        = case proofs.isInputExhaustedMid of
         --            No => ()
         --            Yes _ _ => reverse historyMid = list
         --    )
-        inputExhaustedGivesUpstreamReturnInvariant :
-            (Exists {type = Type} $ \a =>
-                Exists {type = a} $ \b =>
-                    (fst originalComposedProof) = Yes a b) -- where fst originalComposedProof is isInputExhaustedMid - no idea why using isInputExhaustedMid gives weird type messages
-            -> ((reverse historyMid = list)
-                = case (fst originalComposedProof) of
-                    No => ()
-                    Yes _ _ => reverse historyMid = list
-            )
-        inputExhaustedGivesUpstreamReturnInvariant ifInputExhausted = rewrite snd $ snd ifInputExhausted in Refl
+        --inputExhaustedGivesUpstreamReturnInvariant ifInputExhausted = rewrite snd $ snd ifInputExhausted in Refl
+        --inputExhaustedGivesUpstreamReturnInvariant :
+        --    ((reverse proofs.historyMid = list)
+        --        = case proofs.isInputExhaustedMid of
+        --            No => ()
+        --            Yes _ _ => reverse proofs.historyMid = list
+        --    )
+        --inputExhaustedGivesUpstreamReturnInvariant = rewrite snd $ snd midIsExhausted in Refl
 
-        --upstreamReturnInvariantRegardlessOfReturnMid : 
+        -- --0 upstreamProof : case fst originalComposedProof of
+        -- --    No => ()
+        -- --    Yes _ _ => (fromListReturnInvariant list) (Yes () ()) [] historyMid ()
+        -- --    --Yes _ _ => (\_ _ finalHistoryMid _ => (reverse finalHistoryMid = list)) (Yes () ()) [] historyMid () -- why is this syntax error?
+        -- --upstreamProof = snd $ snd $ snd $ snd originalComposedProof
 
-        --0 upstreamProof : case fst originalComposedProof of
+        -- --0 upstreamReturnInvariant : reverse historyMid = list
+        -- --upstreamReturnInvariant =
+        -- --    rewrite
+        -- --        inputExhaustedGivesUpstreamReturnInvariant midIsExhausted
+        -- --    in
+        -- --        snd $ snd $ snd $ snd originalComposedProof
+        -- --0 testest : ?
+        -- --testest = snd $ snd $ snd $ snd originalComposedProof
+        -- --upstreamProof =
+        -- --    rewrite
+        -- --        ?todowhattorewrite
+        -- --    in
+        -- --        snd $ snd $ snd $ snd originalComposedProof
+
+        --         {-
+        --         (0 returnOut : Type)
+        --         -> (0 streamIn : Type)
+        --         -> (0 returnInvariant : (List streamIn -> List Void -> returnOut -> Type))
+        --         -> (list : List streamIn)
+        --         -> Pipe streamIn Void () Identity returnOut
+        --         -> (returnValue : returnOut)
+        --         -> (0 _ :
+        --             Exists (\finalIsInputExhaustedMid
+        --                 => Exists (\finalHistoryMid
+        --                     => (ExhaustsInputAnd returnInvariant finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair))))
+        --         -> Subset returnOut (\returnValue
+        --             => Exists (\finalIsInputExhaustedMid
+        --                 => Exists (\finalHistoryMid
+        --                     => (ExhaustsInputAnd returnInvariant finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair))))
+        --         -> (\value => Foldable implementation at Prelude.Types:428:1--441:59)
+        --          -}
+
+        --0 returnMidValueIsUnit : proofs.returnMidValue = ()
+        --returnMidValueIsUnit = rewrite midIsExhausted.snd.snd in proofs.returnMidValue
+
+        --0 upstreamProofSimplified : case proofs.isInputExhaustedMid of
         --    No => ()
-        --    Yes _ _ => (fromListReturnInvariant list) (Yes () ()) [] historyMid ()
-        --    --Yes _ _ => (\_ _ finalHistoryMid _ => (reverse finalHistoryMid = list)) (Yes () ()) [] historyMid () -- why is this syntax error?
-        --upstreamProof = snd $ snd $ snd $ snd originalComposedProof
-
-        --0 upstreamReturnInvariant : reverse historyMid = list
-        --upstreamReturnInvariant =
+        --    Yes _ _ => reverse proofs.historyMid = list
+        --upstreamProofSimplified =
         --    rewrite
-        --        inputExhaustedGivesUpstreamReturnInvariant midIsExhausted
+        --        fromListReturnInvariantOnlyDependsOnHistoryOut list proofs.historyMid
         --    in
-        --        snd $ snd $ snd $ snd originalComposedProof
-        --0 testest : ?
-        --testest = snd $ snd $ snd $ snd originalComposedProof
-        --upstreamProof =
+        --        proofs.upstreamProof
+
+        0 proofThatReverseOfHistoryMidEqualsList : reverse proofs.historyMid = list
+        ----proofThatReverseOfHistoryMidEqualsList = Refl
+        ----    rewrite
+        ----        inputExhaustedGivesUpstreamReturnInvariant (snd $ snd midIsExhausted)
+        ----    in
+        ----        proofs.upstreamProof
+        --proofThatReverseOfHistoryMidEqualsList =
         --    rewrite
-        --        ?todowhattorewrite
+        --        --the ((reverse proofs.historyMid = list)
+        --        --    = case proofs.isInputExhaustedMid of
+        --        --        No => ()
+        --        --        Yes _ _ => reverse proofs.historyMid = list
+        --        --) ?todo
+        --        the (fromListReturnInvariant list _ [] proofs.historyMid () -- Problem: There's not enough info to know that isInputEhaustedIn is (Yes () ())
+        --            = case proofs.isInputExhaustedMid of
+        --                No => ()
+        --                Yes _ _ => fromListReturnInvariant list _ [] proofs.historyMid ()
+        --        ) ?todo
+        --        --inputExhaustedGivesUpstreamReturnInvariant
         --    in
-        --        snd $ snd $ snd $ snd originalComposedProof
+        --        proofs.upstreamProof
+        --proofThatReverseOfHistoryMidEqualsList = midIsExhausted.snd.fst
+        --proofThatReverseOfHistoryMidEqualsList = rewrite (snd proofs.midExhaustedContainsUpstreamReturnProof) in midIsExhausted.snd.fst
+        --proofThatReverseOfHistoryMidEqualsList = case proofs.isInputExhaustedMid of
+        --    No => void (rewrite inputNotExhaustedIsContradiction Refl in proofs.downstreamProof)
+        --    Yes property upstreamReturnProof =>
+        --        rewrite
+        --            (
+        --                snd
+        --                (rewrite the (proofs.isInputExhaustedMid = Yes property upstreamReturnProof) Refl in proofs.midExhaustedContainsUpstreamReturnProof)
+        --            )
+        --        in
+        --            upstreamProof
 
-                {-
-                (0 returnOut : Type)
-                -> (0 streamIn : Type)
-                -> (0 returnInvariant : (List streamIn -> List Void -> returnOut -> Type))
-                -> (list : List streamIn)
-                -> Pipe streamIn Void () Identity returnOut
-                -> (returnValue : returnOut)
-                -> (0 _ :
-                    Exists (\finalIsInputExhaustedMid
-                        => Exists (\finalHistoryMid
-                            => (ExhaustsInputAnd returnInvariant finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair))))
-                -> Subset returnOut (\returnValue
-                    => Exists (\finalIsInputExhaustedMid
-                        => Exists (\finalHistoryMid
-                            => (ExhaustsInputAnd returnInvariant finalIsInputExhaustedMid finalHistoryMid [] returnValue, ErasedDPair))))
-                -> (\value => Foldable implementation at Prelude.Types:428:1--441:59)
-                 -}
+        --0 upstreamProofExtracted : fromListReturnInvariant list proofs.hackIsInputExhaustedIn [] proofs.historyMid ()
+        --upstreamProofExtracted =
+        --    case proofs.isInputExhaustedMid of
+        --        No => void (rewrite inputNotExhaustedIsContradiction (the (proofs.isInputExhaustedMid = No) Refl) in proofs.downstreamProof)
+        --        Yes upstreamReturnProperty upstreamReturnProof =>
+        --            --rewrite
+        --            --    sym proofs.hackIsInputExhaustedInEq
+        --            --in
+        --                rewrite
+        --                     (snd proofs.midExhaustedContainsUpstreamReturnProof)
+        --                in
+        --                    upstreamReturnProof
+        --inputExhaustedGivesMidExhaustEqReturnProof :
+        --    (proofs.isInputExhaustedMid = Yes _ _)
+        --    -> (
+        --        ErasedDPair
+        --            {a = ()}
+        --            {b = \finalReturnOut
+        --                => property = (fromListReturnInvariant) isUpstreamInputExhausted historyIn historyOut ()
+        --            }
+        --        = IsInputExhaustedContainsUpstreamReturnProof
+        --            (fromListReturnInvariant list)
+        --            []
+        --            proofs.historyMid
+        --            proofs.hackIsInputExhaustedIn
+        --            proofs.isInputExhaustedMid)
+        --inputExhaustedGivesDownstreamReturnInvariant ifInputExhausted = rewrite ifInputExhausted in Refl
 
-        0 proofThatReverseOfHistoryMidEqualsList : reverse historyMid = list
-        0 proofThatHistoryMidEqualsReverseOfList : historyMid = reverse list
+        --0 weHaveUpstreamReturnProof : midIsExhausted.fst = fromListReturnInvariant list (Yes () ()) [] proofs.historyMid ()
+        ----weHaveUpstreamReturnProof = snd $ rewrite midIsExhausted.snd.snd in proofs.midExhaustedContainsUpstreamReturnProof
+        --weHaveUpstreamReturnProof = snd $ case proofs.isInputExhaustedMid of
+        --    No => void (rewrite inputNotExhaustedIsContradiction (the (proofs.isInputExhaustedMid = No) Refl) in proofs.downstreamProof)
+        --    Yes property upstreamReturnProof =>  proofs.midExhaustedContainsUpstreamReturnProof
+        
+        --case proofs.isInputExhaustedMid of
+        --    No => void (rewrite inputNotExhaustedIsContradiction Refl in proofs.downstreamProof)
+        --    Yes property upstreamReturnProof =>
+        --            (
+        --                snd
+        --                (rewrite the (proofs.isInputExhaustedMid = Yes property upstreamReturnProof) Refl in proofs.midExhaustedContainsUpstreamReturnProof)
+        --            )
+
+        0 proofThatHistoryMidEqualsReverseOfList : proofs.historyMid = reverse list
 
         0 finalProof : returnInvariant (reverse list) [] returnValue
         finalProof = rewrite sym proofThatHistoryMidEqualsReverseOfList in downstreamReturnInvariantProof
@@ -1370,6 +1532,7 @@ runInputExhaustingPurePipeWithList pipe list =
 --testMyUse2 = Builtin.snd $ snd testMyErased
 
 
+{-
 covering
 mapEach :
     Monad effects
@@ -1643,3 +1806,5 @@ main : IO ()
 main = run $ handle app
     (\() => putStr "Ok")
     (\error : IOError => putStr "Error")
+
+-}
