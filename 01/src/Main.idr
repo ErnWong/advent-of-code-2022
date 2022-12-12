@@ -1271,6 +1271,10 @@ sum :
 sum = fromPurePipe $ foldPipe (+) 0
 
 
+maxReturnInvariant : List Nat -> List Void -> Nat -> Type
+maxReturnInvariant finalHistoryIn finalHistoryOut finalReturn = (finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn)
+
+
 covering
 max :
     Monad effects
@@ -1282,12 +1286,19 @@ max :
             isInputExhausted = No,
             historyIn = [],
             historyOut = [],
-            returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
-                => finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn
+            returnInvariant = ExhaustsInputAnd Main.maxReturnInvariant
         }
         effects
         Nat
 max = fromPurePipe $ foldPipe maximum 0
+
+
+forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
+    (input: List Nat)
+    -> ErasedThing (fst (runInputExhaustingPurePipeWithList {returnInvariant = Main.maxReturnInvariant} Main.max input) = foldr Data.Nat.maximum 0 (reverse input))
+forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input = let
+        x = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList max input
+    in ?todo
 
 
 printReturnValue :
