@@ -1,6 +1,6 @@
 package mypkg
 
-modules = Main
+modules = Main, VerifiedSewage
 main = Main
 
 depends = contrib
