@@ -859,17 +859,6 @@ fromListReturnInvariant : List streamOut -> IsInputExhausted -> List Void -> Lis
 fromListReturnInvariant list _ _ finalHistoryOut _ = reverse finalHistoryOut = list
 
 
--- TODO delete this unused
-fromListReturnInvariantOnlyDependsOnHistoryOut :
-    (list: List streamOut)
-    -> (historyOut: List streamOut)
-    -> {0 isInputEhaustedIn: IsInputExhausted}
-    -> {0 historyIn: List Void}
-    -> (fromListReturnInvariant list isInputExhaustedIn historyIn historyOut ()
-        = (reverse historyOut = list))
-fromListReturnInvariantOnlyDependsOnHistoryOut list historyOut = Refl
-
-
 export
 covering
 fromList :
