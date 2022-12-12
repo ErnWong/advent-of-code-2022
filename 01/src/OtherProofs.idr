@@ -18,7 +18,7 @@ import VerifiedSewage
 
 covering
 forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum :
-    (input: List Nat)
+    (input : List Nat)
     -> ErasedThing (
         fst (
             runInputExhaustingPurePipeWithList
@@ -33,7 +33,7 @@ forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum input
 
 covering
 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
-    (input: List Nat)
+    (input : List Nat)
     -> ErasedThing (
         fst (
             runInputExhaustingPurePipeWithList

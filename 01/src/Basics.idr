@@ -5,12 +5,12 @@ import Data.List.Reverse
 
 
 public export
-data ErasedThing : (0 a: Type) -> Type where
-    MkErasedThing : (0 thing: a) -> ErasedThing a
+data ErasedThing : (0 a : Type) -> Type where
+    MkErasedThing : (0 thing : a) -> ErasedThing a
 
 
 public export
-record ErasedDPair {0 a: Type} {0 b: a -> Type} where
+record ErasedDPair {0 a : Type} {0 b : a -> Type} where
     constructor MkErasedDPair
     0 fst : a
     0 snd : b fst
@@ -36,5 +36,5 @@ reverseCanJumpAcrossTheEqualsSign xs ys reverseOnTheLeft =
 
 
 export
-reverseMovesHeadToEnd : (x: a) -> (xs : List a) -> reverse (x :: xs) = (reverse xs) ++ [x]
+reverseMovesHeadToEnd : (x : a) -> (xs : List a) -> reverse (x :: xs) = (reverse xs) ++ [x]
 reverseMovesHeadToEnd x xs = reverseOntoSpec [x] xs

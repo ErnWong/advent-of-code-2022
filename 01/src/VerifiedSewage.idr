@@ -21,7 +21,7 @@ import Basics
 public export
 data IsInputExhausted : Type where
     No : IsInputExhausted
-    Yes : (0 upstreamReturnProperty: Type) -> (0 upstreamReturnProof: upstreamReturnProperty) -> IsInputExhausted
+    Yes : (0 upstreamReturnProperty : Type) -> (0 upstreamReturnProof : upstreamReturnProperty) -> IsInputExhausted
 
 
 public export
@@ -63,7 +63,7 @@ ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue
 ||| stream invariant by restricting what upstream pipes are allowed.
 public export
 data Pipe :
-    (streamIn, streamOut, returnIn: Type)
+    (streamIn, streamOut, returnIn : Type)
     -> {0 isInputExhausted : IsInputExhausted} -- TODO: We can pack these into a new PipeState record type
     -> {0 historyIn : List streamIn}
     -> {0 historyOut : List streamOut}
@@ -100,7 +100,7 @@ data Pipe :
         }
 
     Yield :
-        (value: streamOut)
+        (value : streamOut)
         -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
         -> Inf (Pipe {
             streamIn,
@@ -129,8 +129,8 @@ data Pipe :
 
     Await :
         (returnIn
-            -> {0 upstreamReturnProperty: Type}
-            -> (0 upstreamReturnProof: upstreamReturnProperty)
+            -> {0 upstreamReturnProperty : Type}
+            -> (0 upstreamReturnProof : upstreamReturnProperty)
             -> Inf (Pipe {
                 streamIn,
                 streamOut,
@@ -143,7 +143,7 @@ data Pipe :
                 effects,
                 returnOut
             }))
-        -> ((value: streamIn)
+        -> ((value : streamIn)
             -> Inf (Pipe {
                 streamIn,
                 streamOut,
@@ -170,7 +170,7 @@ data Pipe :
         }
 
     Return :
-        (returnValue: returnOut)
+        (returnValue : returnOut)
         -> (0 returnInvariantProof : returnInvariant isInputExhausted historyIn historyOut returnValue)
         -> Pipe {
             streamIn,
@@ -234,8 +234,8 @@ recurseToReturn :
         returnOut = returnOutA
     }
     -> (
-        (0 mapHistoryIn: List streamIn)
-        -> (0 mapHistoryOut: List streamOut)
+        (0 mapHistoryIn : List streamIn)
+        -> (0 mapHistoryOut : List streamOut)
         -> returnOutA
         -> Pipe {
             streamIn,
@@ -328,8 +328,8 @@ covering
         returnOut = returnMid
     }
     -> (returnMid
-        -> {0 newHistoryIn: List streamIn}
-        -> {0 newHistoryOut: List streamOut}
+        -> {0 newHistoryIn : List streamIn}
+        -> {0 newHistoryOut : List streamOut}
         -> Pipe {
             streamIn,
             streamOut,
@@ -477,8 +477,8 @@ fromInputExhaustedPipe pipe = recurse pipe where
 
 IsInputExhaustedContainsUpstreamReturnProof :
     (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
-    -> (historyIn: List streamIn)
-    -> (historyOut: List streamOut)
+    -> (historyIn : List streamIn)
+    -> (historyOut : List streamOut)
     -> IsInputExhausted
     -> IsInputExhausted
     -> Type
@@ -493,12 +493,12 @@ IsInputExhaustedContainsUpstreamReturnProof returnInvariant historyIn historyOut
 
 export
 upstreamReturnProofFromInputExhausted :
-    {0 returnInvariant: IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type}
-    -> {0 historyIn: List streamIn}
-    -> {0 historyMid: List streamMid}
-    -> {0 isInputExhaustedIn: IsInputExhausted}
-    -> (isInputExhaustedMid: IsInputExhausted)
-    -> (containsUpstreamReturnProof:
+    {0 returnInvariant : IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type}
+    -> {0 historyIn : List streamIn}
+    -> {0 historyMid : List streamMid}
+    -> {0 isInputExhaustedIn : IsInputExhausted}
+    -> (isInputExhaustedMid : IsInputExhausted)
+    -> (containsUpstreamReturnProof :
         IsInputExhaustedContainsUpstreamReturnProof
             returnInvariant
             historyIn
@@ -506,7 +506,7 @@ upstreamReturnProofFromInputExhausted :
             isInputExhaustedIn
             isInputExhaustedMid
     )
-    -> (proofThatWeDidExhaust:
+    -> (proofThatWeDidExhaust :
         Exists $ \property
             => Exists $ \returnProof
                 => (isInputExhaustedMid = Yes property returnProof)
@@ -548,26 +548,26 @@ composeStreamInvariants streamInvariantUpstream streamInvariantDownstream curren
 %prefix_record_projections off
 export
 record ComposedReturnProof
-    {0 streamIn: Type}
-    {0 streamMid: Type}
-    {0 returnMid: Type}
-    (returnInvariantUpstream: IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
-    (returnInvariantDownstream: IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
+    {0 streamIn : Type}
+    {0 streamMid : Type}
+    {0 returnMid : Type}
+    (returnInvariantUpstream : IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type)
+    (returnInvariantDownstream : IsInputExhausted -> List streamMid -> List streamOut -> returnOut -> Type)
     (isInputExhaustedIn : IsInputExhausted)
     (historyIn : List streamIn)
     (historyOut : List streamOut)
     (returnOutValue : returnOut)
     where
         constructor MkComposedReturnProof
-        0 isInputExhaustedMid: IsInputExhausted
-        0 historyMid: List streamMid
-        0 downstreamProof:
+        0 isInputExhaustedMid : IsInputExhausted
+        0 historyMid : List streamMid
+        0 downstreamProof :
             returnInvariantDownstream
                 isInputExhaustedMid
                 historyMid
                 historyOut
                 returnOutValue
-        0 midExhaustedContainsUpstreamReturnProof:
+        0 midExhaustedContainsUpstreamReturnProof :
             IsInputExhaustedContainsUpstreamReturnProof
                 returnInvariantUpstream
                 historyIn
@@ -626,11 +626,11 @@ covering --todo totality
     mutual
         pull : 
             Monad effects'
-            => {0 pullIsInputExhaustedIn: IsInputExhausted}
-            -> {0 pullIsInputExhaustedMid: IsInputExhausted}
-            -> {0 pullHistoryIn: List streamIn}
-            -> {0 pullHistoryMid: List streamMid}
-            -> {0 midExhaustedContainsUpstreamReturnProof:
+            => {0 pullIsInputExhaustedIn : IsInputExhausted}
+            -> {0 pullIsInputExhaustedMid : IsInputExhausted}
+            -> {0 pullHistoryIn : List streamIn}
+            -> {0 pullHistoryMid : List streamMid}
+            -> {0 midExhaustedContainsUpstreamReturnProof :
                 IsInputExhaustedContainsUpstreamReturnProof
                     returnInvariantUpstream
                     pullHistoryIn
@@ -700,9 +700,9 @@ covering --todo totality
 
         push :
             Monad effects'
-            => {0 pushIsInputExhaustedIn: IsInputExhausted}
-            -> {0 pushHistoryIn: List streamIn}
-            -> {0 pushHistoryMid: List streamMid}
+            => {0 pushIsInputExhaustedIn : IsInputExhausted}
+            -> {0 pushHistoryIn : List streamIn}
+            -> {0 pushHistoryMid : List streamMid}
             -> Pipe {
                 streamIn,
                 streamOut = streamMid,
@@ -716,8 +716,8 @@ covering --todo totality
                 returnOut = returnMid
             }
             -> (returnMid
-                -> {0 upstreamReturnProperty: Type}
-                -> (0 upstreamReturnProof: upstreamReturnProperty)
+                -> {0 upstreamReturnProperty : Type}
+                -> (0 upstreamReturnProof : upstreamReturnProperty)
                 -> Inf (Pipe {
                     streamIn = streamMid,
                     streamOut,
@@ -731,7 +731,7 @@ covering --todo totality
                     returnOut
                 })
             )
-            -> ((value: streamMid)
+            -> ((value : streamMid)
                 -> Inf (Pipe {
                     streamIn = streamMid,
                     streamOut,
@@ -781,7 +781,7 @@ covering --todo totality
 
 export
 yield :
-    (value: streamOut)
+    (value : streamOut)
     -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
     -> Pipe {
         streamIn,
@@ -800,9 +800,9 @@ yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return 
 
 public export
 Effect :
-    (effects: Type -> Type)
-    -> (returnOut: Type)
-    -> {default NoReturnInvariant 0 returnInvariant:
+    (effects : Type -> Type)
+    -> (returnOut : Type)
+    -> {default NoReturnInvariant 0 returnInvariant :
         IsInputExhausted -> List Void -> List Void -> returnOut -> Type} -> Type
 Effect effects returnOut = Pipe {
     streamIn = Void, -- An effect pipe doesn't take any stream in
@@ -845,7 +845,7 @@ export
 covering
 fromList :
     Monad effects
-    => (list: List streamOut)
+    => (list : List streamOut)
     -> Pipe {
         streamIn = Void,
         streamOut,
@@ -854,7 +854,7 @@ fromList :
         historyIn = [],
         historyOut = [],
         streamInvariant = \currentHistoryIn, currentHistoryOut
-            => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
+            => (suffix : List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
         returnInvariant = fromList_returnInvariant list,
         effects,
         returnOut = () -- This pipe returns () upon reaching the end of the list.
@@ -864,15 +864,15 @@ fromList list = recurse list proofBaseCase where
     proofBaseCase = Refl
 
     recurse :
-        (remaining: List streamOut)
-        -> (0 inductionHypothesis: (reverse historyOut) ++ remaining = list)
+        (remaining : List streamOut)
+        -> (0 inductionHypothesis : (reverse historyOut) ++ remaining = list)
         -> Pipe {
             streamIn = Void,
             streamOut,
             returnIn = Void,
             historyOut,
             streamInvariant = \currentHistoryIn, currentHistoryOut
-                => (suffix: List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
+                => (suffix : List streamOut ** (reverse currentHistoryOut) ++ suffix = list),
             returnInvariant = \finalIsInputExhausted, finalHistoryIn, finalHistoryOut, finalReturnOut
                 => reverse finalHistoryOut = list,
             effects,
@@ -914,7 +914,7 @@ runPurePipeWithList :
         effects = Identity,
         returnOut
     }
-    -> (input: List streamIn)
+    -> (input : List streamIn)
     -> Subset returnOut $
         \returnValue
             => ComposedReturnProof
@@ -945,7 +945,7 @@ runInputExhaustingPurePipeWithList :
         effects = Identity,
         returnOut
     }
-    -> (input: List streamIn)
+    -> (input : List streamIn)
     -> Subset returnOut $ \returnValue => returnInvariant (reverse input) [] returnValue
 runInputExhaustingPurePipeWithList pipe list =
     let
@@ -964,7 +964,7 @@ runInputExhaustingPurePipeWithList pipe list =
         inputExhaustedGivesDownstreamReturnInvariant ifInputExhausted = rewrite ifInputExhausted in Refl
 
         extractIsInputExhaustedEquality :
-            (isInputExhausted: IsInputExhausted)
+            (isInputExhausted : IsInputExhausted)
             -> Either
                 (isInputExhausted = No)
                 (Exists {type = Type} $ \a
@@ -1036,8 +1036,8 @@ mapEach function = Await
 export
 covering --todo
 foldPipe :
-    (reducer: streamIn -> returnOut -> returnOut)
-    -> (initialValue: returnOut)
+    (reducer : streamIn -> returnOut -> returnOut)
+    -> (initialValue : returnOut)
     -> Pipe {
         streamIn,
         streamOut = Void,
@@ -1056,9 +1056,9 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
     proofBaseCase = Refl
 
     recurse :
-        (0 historyIn: List streamIn)
-        -> (accumulator: returnOut)
-        -> (0 inductionHypothesis: accumulator = foldr reducer initialValue historyIn)
+        (0 historyIn : List streamIn)
+        -> (accumulator : returnOut)
+        -> (0 inductionHypothesis : accumulator = foldr reducer initialValue historyIn)
         -> Pipe {
             streamIn,
             streamOut = Void,
@@ -1078,7 +1078,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
             onStream
         where
             onStream :
-                (value: streamIn)
+                (value : streamIn)
                 -> Inf (Pipe {
                     streamIn,
                     streamOut = Void,
@@ -1181,7 +1181,7 @@ splitByEmptyLine :
     }
 splitByEmptyLine initialInnerPipeline = runInnerPipe No initialInnerPipeline where
     runInnerPipe :
-        (isInputExhausted: IsInputExhausted)
+        (isInputExhausted : IsInputExhausted)
         -> Pipe {
             streamIn = String,
             streamOut = Void,
