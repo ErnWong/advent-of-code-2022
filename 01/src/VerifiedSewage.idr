@@ -11,27 +11,11 @@ import Data.Nat
 import Data.String
 import System.File.Virtual
 
+import Basics
+
 
 -- Halting problem go brrr...
 %default total
-
-
-reverseCanJumpAcrossTheEqualsSign :
-    (xs, ys : List a)
-    -> reverse xs = ys
-    -> xs = reverse ys
-reverseCanJumpAcrossTheEqualsSign xs ys reverseOnTheLeft =
-    let
-        reverseItself : (reverse (reverse xs) = reverse (reverse xs))
-        reverseItself = Refl
-
-        applyReverseToBothSides : reverse (reverse xs) = reverse ys
-        applyReverseToBothSides = rewrite sym reverseOnTheLeft in reverseItself
-
-        twoReversesOnTheLeftCancelsOut : xs = reverse ys
-        twoReversesOnTheLeftCancelsOut = rewrite sym $ reverseInvolutive xs in applyReverseToBothSides
-    in
-        twoReversesOnTheLeftCancelsOut
 
 
 public export
@@ -524,12 +508,6 @@ fromInputExhaustedPipe pipe = recurse pipe where
     recurse (Return value returnInvariantProof) = Return value ()
 
 
-record ErasedDPair {0 a: Type} {0 b: a -> Type} where
-    constructor MkErasedDPair
-    0 fst : a
-    0 snd : b fst
-
-
 IsInputExhaustedContainsUpstreamReturnProof :
     (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
     -> (historyIn: List streamIn)
@@ -544,11 +522,6 @@ IsInputExhaustedContainsUpstreamReturnProof returnInvariant historyIn historyOut
         {b = \finalReturnOut
             => property = returnInvariant isUpstreamInputExhausted historyIn historyOut finalReturnOut
         }
-
-
-public export
-data ErasedThing : (0 a: Type) -> Type where
-    MkErasedThing : (0 thing: a) -> ErasedThing a
 
 
 export
@@ -942,9 +915,6 @@ fromList list = recurse list proofBaseCase where
         Yield x
             {streamInvariantProof = (xs ** inductionStep)}
             (recurse xs inductionStep) where
-                reverseMovesHeadToEnd : (x: a) -> (xs : List a) -> reverse (x :: xs) = (reverse xs) ++ [x]
-                reverseMovesHeadToEnd x xs = reverseOntoSpec [x] xs
-
                 0 inductionHypothesis : (reverse historyOut) ++ (x :: xs) = list
                 inductionHypothesis = historyIsPrefix
 
