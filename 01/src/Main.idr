@@ -1271,38 +1271,34 @@ sum :
 sum = fromPurePipe $ foldPipe (+) 0
 
 
-maxReturnInvariant : (Ord streamIn) => streamIn -> List streamIn -> List Void -> streamIn -> Type
-maxReturnInvariant initialValue finalHistoryIn finalHistoryOut finalReturn = (finalReturn = foldr Prelude.max initialValue finalHistoryIn)
+maxReturnInvariant : List Nat -> List Void -> Nat -> Type
+maxReturnInvariant finalHistoryIn finalHistoryOut finalReturn = (finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn)
 
 
 covering
 max :
-    (Monad effects, Ord streamIn)
-    =>
-    (initialValue: streamIn)
-    -> Pipe
-        streamIn
+    Monad effects
+    => Pipe
+        Nat
         Void
         ()
         {
             isInputExhausted = No,
             historyIn = [],
             historyOut = [],
-            returnInvariant = ExhaustsInputAnd $ Main.maxReturnInvariant initialValue
+            returnInvariant = ExhaustsInputAnd Main.maxReturnInvariant
         }
         effects
-        streamIn
-max initialValue = fromPurePipe $ foldPipe Prelude.max initialValue
+        Nat
+max = fromPurePipe $ foldPipe maximum 0
 
 
 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
-    (Ord streamIn)
-    => (initialValue: streamIn)
-    -> (input: List streamIn)
-    -> ErasedThing (fst (runInputExhaustingPurePipeWithList {returnInvariant = Main.maxReturnInvariant initialValue} (Main.max initialValue) input) = foldr Prelude.max initialValue (reverse input))
-forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax initialValue input = let
-        x = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList (max initialValue) input
-    in x
+    (input: List Nat)
+    -> ErasedThing (fst (runInputExhaustingPurePipeWithList {returnInvariant = Main.maxReturnInvariant} Main.max input) = foldr Data.Nat.maximum 0 (reverse input))
+forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input = let
+        x = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList max input
+    in ?todo
 
 
 printReturnValue :
@@ -1320,7 +1316,7 @@ app = runPipe $
     readLines
     .| splitByEmptyLine (parseNat .| printEach .| sum)
     .| printEach
-    .| max 0
+    .| max
     .| printReturnValue
 
 
