@@ -20,7 +20,7 @@ forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
     -> ErasedThing (
         fst (
             runInputExhaustingPurePipeWithList
-                {returnInvariant = VerifiedSewage.maxReturnInvariant}
+                {returnInvariant = VerifiedSewage.max_returnInvariant}
                 VerifiedSewage.max
                 input
         ) = foldr Data.Nat.maximum 0 (reverse input)
