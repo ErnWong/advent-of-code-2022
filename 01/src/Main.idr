@@ -2,31 +2,12 @@ module Main
 
 import Control.App.Console
 import Control.App.FileIO
-import Control.Monad.Identity
-import Data.DPair
-import Data.Nat
 
-import Basics
 import VerifiedSewage
 
 
 -- Halting problem go brrr...
 %default total
-
-
-covering
-forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
-    (input: List Nat)
-    -> ErasedThing (
-        fst (
-            runInputExhaustingPurePipeWithList
-                {returnInvariant = VerifiedSewage.max_returnInvariant}
-                VerifiedSewage.max
-                input
-        ) = foldr Data.Nat.maximum 0 (reverse input)
-    )
-forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input
-    = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList max input
 
 
 covering
