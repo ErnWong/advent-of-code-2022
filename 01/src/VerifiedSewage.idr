@@ -1238,6 +1238,12 @@ parseNat : Monad effects => Pipe {
 parseNat = mapEach stringToNatOrZ
 
 
+public export
+sum_returnInvariant : List Nat -> List Void -> Nat -> Type
+sum_returnInvariant finalHistoryIn finalHistoryOut finalReturn
+    = (finalReturn = foldr (+) 0 finalHistoryIn)
+
+
 export
 covering
 sum :
@@ -1249,8 +1255,7 @@ sum :
         isInputExhausted = No,
         historyIn = [],
         historyOut = [],
-        returnInvariant = ExhaustsInputAnd $ \finalHistoryIn, finalHistoryOut, finalReturn
-            => finalReturn = foldr (+) 0 finalHistoryIn,
+        returnInvariant = ExhaustsInputAnd VerifiedSewage.sum_returnInvariant,
         effects,
         returnOut = Nat
     }

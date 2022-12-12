@@ -17,6 +17,21 @@ import VerifiedSewage
 
 
 covering
+forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum :
+    (input: List Nat)
+    -> ErasedThing (
+        fst (
+            runInputExhaustingPurePipeWithList
+                {returnInvariant = VerifiedSewage.sum_returnInvariant}
+                VerifiedSewage.sum
+                input
+        ) = foldr (+) 0 (reverse input)
+    )
+forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum input
+    = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList sum input
+
+
+covering
 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
     (input: List Nat)
     -> ErasedThing (
