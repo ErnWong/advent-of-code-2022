@@ -1,3 +1,26 @@
+||| VerifiedSewage is a stream processing library that provides functionality
+||| similar to iterators in other languages. A piece of computation is
+||| modelled as a stream of values that are generated, processed, and consumed
+||| by computational units called "Pipes". Pipes can be connected in chains
+||| where data produced by an upstream pipe would flow down to the downstream
+||| pipe. More importantly, the stream is demand-driven, meaning that the
+||| flow of data is controlled downstream, so that upstream will never need to
+||| produce more data than it will ever be consumed downstream.
+|||
+||| This Pipes implementation is based on https://github.com/QuentinDuval/IdrisPipes/
+||| but ported from Idris v1 to Idris v2, and heavily extended so that we can prove
+||| things about our pipes.
+|||
+||| I was hoping that I could achieve something similar to this with just
+||| using codata or something, as the key part of this is the laziness.
+||| However, I haven't figured out how to create a lazily generated stream
+||| of data that requires effects to obtain said data or to consume said data,
+||| and still be able to process this data in a pure context.
+|||
+||| The typical usage is to define small modular `Pipe` instances, and
+||| wire them together using the pipe composition infix operator `(.|)`.
+||| Then, you can run this pipe using `runPipe` which will service the
+||| most downstream pipe until it terminates by returning a value.
 module VerifiedSewage
 
 import Control.App.Console
@@ -18,49 +41,186 @@ import Basics
 %default total
 
 
+||| Here we define a datatype (similar to that of Rust's tagged unions) that
+||| describe whether a pipe has exhausted all of its upstream's data, and
+||| therefore can no longer pull/await any more data. The upstream is said
+||| to be exhausted once the downstream receives a return value from the
+||| upstream pipe.
 public export
 data IsInputExhausted : Type where
+    ||| Upstream hasn't been exhausted yet, meaning the pipe is allowed to
+    ||| await for more data from upstream.
     No : IsInputExhausted
+
+    ||| Upstream has been exhausted (an optionally here we also supply a proof
+    ||| that the upstream did indeed give us a return value). This menas that
+    ||| this pipe cannot await for any more data.
+    |||
+    ||| Alternatively, we can specify that a pipe will never await for stream
+    ||| input by specifying that a pipe has its inputs exhausted. Such pipes
+    ||| can be used in contexts that expect a non-exhausted pipe by using
+    ||| the `fromInputExhaustedPipe` function.
+    |||
+    ||| @ upstreamReturnProperty describes what type the return proof is going
+    |||   to be. In cases where we don't care about passing proofs, we can
+    |||   specify the unit type `()` for this argument.
+    ||| @ upstreamReturnProof allows information about the upstream return value
+    |||   to be propagated downstream. In cases where we don't care about proofs,
+    |||   the unit value `()` can be specified for this argument.
     Yes : (0 upstreamReturnProperty : Type) -> (0 upstreamReturnProof : upstreamReturnProperty) -> IsInputExhausted
 
 
+||| We prove that the two possible `IsInputExhausted` states are mutually
+||| exclusive, meaning that if we managed to obtain a proof that they are
+||| equal, then we have arrived at a contradiction (aka `Void`).
 public export
 noIsNeverYes : (No = Yes _ _) -> Void
 noIsNeverYes Refl impossible
 
 
+||| We can talk about how a pipe is guaranteed to only output stream values
+||| that satisfy some kind of property, and we do this by specifying
+||| "stream invariants", but in cases where we don't care about what invariants
+||| a pipe has, we can specify this `NoStreamInvariant` instead, which is
+||| always guaranteed to be satisfiable.
+|||
+||| See the `streamInvariant` type index for the `Pipe` type.
+|||
+||| @ historyIn The list of stream values that the pipe has seen so far.
+||| @ historyOut The list of stream values that the pipe has outputted.
+||| The return value is a type that, when we can produce an inhabited value
+||| of this type, then we have proven a certain property that relates
+||| `historyIn` and `historyOut` together.
 public export
-NoStreamInvariant : List streamIn -> List streamOut -> Type
+NoStreamInvariant : (historyIn : List streamIn) -> (historyOut : List streamOut) -> Type
 NoStreamInvariant _ _ = ()
 
 
+||| We can talk about how a pipe is guaranteed to only output return values
+||| that satisfy some kind of property, and we do this by specifying
+||| "return invariants", but in cases where we don't care about what invariants
+||| a pipe has, we can specify this `NoReturnInvariant` instead, which is
+||| always guaranteed to be satisfiable.
+|||
+||| See the `returnInvariant` type index for the `Pipe` type.
+|||
+||| @ isInputExhausted Whether or not, by the time the pipe has returned,
+|||   that the upstream also returned.
+||| @ historyIn The list of stream values the current pipe has received
+|||   from upstream by the time the current pipe has returned.
+||| @ historyOut The list of stream values the current pipe has outputted
+|||   by the time the current pipe has returned.
+||| @ returnValue The value that is returned by this pipe.
 public export
-NoReturnInvariant : IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type
+NoReturnInvariant :
+    (isInputExhausted : IsInputExhausted)
+    -> (historyIn : List streamIn)
+    -> (historyOut : List streamOut)
+    -> (returnValue : returnOut)
+    -> Type
 NoReturnInvariant _ _ _ _ = ()
 
 
+||| This is a nice convenience function to help build up a pipe's return
+||| invariant that guaranttes that, by the the the pipe has returned,
+||| the upstream pipe must have been exhausted (aka returned). In other
+||| words, a pipe with this invariant guarantees that it will not return
+||| earlier than its upstream pipe.
+|||
+||| For example, to specify a pipe that is guaranteed to read all its
+||| upstream input and guaranteed to stream out each value doubled,
+||| we can write the following:
+|||
+||| ```idris
+||| Pipe {
+|||     returnInvariant = ExhaustsInpuAnd $
+|||         \historyIn, historyOut, returnValue =>
+|||             historyOut = map (\x => 2 * x) historyIn
+||| }
+||| ```
+|||
+||| @ otherReturnInvariant What other return invariants the pipe should
+|||   have.
+||| @ isInputExhausted Whether or not, by the time the pipe has returned,
+|||   that the upstream also returned.
+||| @ historyIn The list of stream values the current pipe has received
+|||   from upstream by the time the current pipe has returned.
+||| @ historyOut The list of stream values the current pipe has outputted
+|||   by the time the current pipe has returned.
+||| @ returnValue The value that is returned by this pipe.
 public export
 ExhaustsInputAnd :
-    (List streamIn -> List streamOut -> returnOut -> Type)
-    -> IsInputExhausted
-    -> List streamIn
-    -> List streamOut
-    -> returnOut
+    (otherReturnInvariant : List streamIn -> List streamOut -> returnOut -> Type)
+    -> (isInputExhausted : IsInputExhausted)
+    -> (historyIn : List streamIn)
+    -> (historyOut : List streamOut)
+    -> (returnValue : returnOut)
     -> Type
 ExhaustsInputAnd otherReturnInvariant No _ _ _ = Void
-ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue = otherReturnInvariant historyIn historyOut returnValue
+ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue
+    = otherReturnInvariant historyIn historyOut returnValue
 
 
-||| Pipe implementation ported from Idris v1 to Idris v2 based on QuentinDuval/IdrisPipes
-||| Extensions to IdrisPipes: We now index by history (erased at runtime) and an invariant
-||| so we can reason about some properties of what a pipe outputs.
+||| This is the primary data type for our VerifiedSewage library. A `Pipe`
+||| represents the "action" the pipe is performing currently, optionally
+||| followed by the next `Pipe` (or instructions on how to obtain that
+||| next `Pipe`) that represents the next action after the current action
+||| is done. Currently, the four actions a pipe can do are:
 |||
-||| Note: At the moment, the streamInvariant only holds every time this pipe yields a stream
-||| output value, and it's not enforced when awaited a new stream input value. This is because
-||| our streamInvariant could be imposing some constraints on what input stream values are allowed
-||| but in reality an downstream pipe has no control over what an upstream pipe sends downstream.
-||| It might be possible to fix this by making sure the (.|) operator enforces the downstream's
-||| stream invariant by restricting what upstream pipes are allowed.
+|||  1. `Do` - performing some effect, followed by the next pipe state.
+|||  2. `Await` - pull data from upstream, which is either followed by
+|||     the next pipe state should upstream return its final value,
+|||     or followed by the next pipe state should upstream yield
+|||     the next stream value.
+|||  3. `Yield` - push data downstream, which is followed by
+|||     the next pipe state.
+|||  4. `Return` - terminate this stream by returning a value, and
+|||     ***not*** followed by any subsequent pipe.
+|||
+||| A `Pipe` can be given a `streamInvariant` and a `returnInvariant`,
+||| which describes the properties that must hold when a pipe yields
+||| and returns respectively. To enforce these invariants, the pipe
+||| must supply proofs for these invariants when yielding or returning
+||| a value.
+|||
+||| Note: At the moment, the `streamInvariant` only holds every time
+||| this pipe yields a stream output value, and it's not enforced when
+||| awaited a new stream input value. This is because our `streamInvariant`
+||| is a bit too free-form: the `streamInvariant` could be imposing
+||| some constraints on what input stream values are allowed but in reality
+||| an downstream pipe has no control over what an upstream pipe sends
+||| downstream (or at least at the moment with this current implementation).
+||| It might be possible to fix this by making sure the (.|) operator
+||| enforces the downstream's stream invariant by restricting what
+||| upstream pipes are allowed.
+|||
+||| @ streamIn What type of stream values does this pipe expect to receive
+|||   from upstream.
+||| @ streamOut What type of stream values does this pipe yield.
+||| @ returnIn What type of return value does this pipe expect to receive
+|||   from upstream.
+||| @ isInputExhausted This is a compile-time representation of a piece of
+|||   the pipe's runtime state. In particular, this indicates whether the
+|||   the current pipe is in a state where the upstream pipe has returned
+|||   and therefore the current pipe cannot await for any more values.
+||| @ historyIn This is a compile-time representation of a piece of the pipe's
+|||   runtime state. In particular, this represents the list of all stream
+|||   values it has received from the upstream pipe, in reverse chronological
+|||   order (i.e. the most recent value is first in the list).
+||| @ historyOut This is a compile-time representation of a piece of the pipe's
+|||   runtime state. In particular, this represents the list of all stream
+|||   values this pipe has outputted, in reverse chronological order
+|||   (i.e. the most recent value is first in the list).
+||| @ effects This is the arbitrary container (aka most likely a `Monad`)
+|||   in which to perform the effects of this pipe should this pipe decide
+|||   to do so (via the `Do` pipe action). An example of a value for this
+|||   argument would be the `IO` monad.
+||| @ returnOut This is the type that the current pipe is expected to return.
+||| @ streamInvariant This is a predicate that relates `historyIn` and `historyOut`,
+|||   and is only enforced when the current pipe decides to `Yield` a value.
+||| @ returnInvariant This is a predicate that relates `isInputExhausted`,
+|||   `historyIn`, `historyOut` and the final return value of this pipe, and
+|||   is enforced when the current pipe decides to `Return` a value.
 public export
 data Pipe :
     (streamIn, streamOut, returnIn : Type)
@@ -73,14 +233,61 @@ data Pipe :
     -> {default NoReturnInvariant 0 returnInvariant : IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type}
     -> Type where
 
+    ||| The `Do` action of a pipe represents some effectful step, such as retrieving
+    ||| an input from the user, printing a value, etc. Typically you'd use the `lift`
+    ||| function instead of constructing a `Do` value manually, as the `lift` function
+    ||| can then be used monadically in a do-block allowing you to ergonomically
+    ||| chain the continuation with the ability to extract the value out from this effect.
+    |||
+    ||| @ effect The effect which, when run, produces the next continuation pipe.
     Do :
-        effects (Inf (Pipe {
+        (effect : effects (Inf (Pipe {
             streamIn,
             streamOut,
             returnIn,
             isInputExhausted,
             historyIn,
             historyOut,
+            streamInvariant,
+            returnInvariant,
+            effects,
+            returnOut
+        })))
+        -> Pipe {
+            streamIn,
+            streamOut,
+            returnIn,
+            isInputExhausted,
+            historyIn,
+            historyOut,
+            streamInvariant,
+            returnInvariant,
+            effects,
+            returnOut
+        }
+
+    ||| The `Yield` action of a pipe represents pushing a stream value downstream.
+    ||| Typically you'd use the `yield` function instead of constructing a `Yield`
+    ||| value manually, as the `yield` function can then be used monadically in
+    ||| a do-block allowing you to ergonomically chain the continuation.
+    |||
+    ||| @ value The stream value to yield (aka "push") downstream.
+    ||| @ streamInvariantProof The proof that this new stream value satisfies the
+    |||   stream invariant of this pipe. If `streamInvariant` is `NoStreamInvariant`,
+    |||   you can specify the unit value `()` as the proof, although this is an
+    |||   `auto` implicit parameter and Idris should be able to deduce it for you in
+    |||   most cases.
+    ||| @ continuation The next pipe state to run after yielding this `value`.
+    Yield :
+        (value : streamOut)
+        -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
+        -> (continuation : Inf (Pipe {
+            streamIn,
+            streamOut,
+            returnIn,
+            isInputExhausted,
+            historyIn,
+            historyOut = (value :: historyOut),
             streamInvariant,
             returnInvariant,
             effects,
@@ -99,36 +306,23 @@ data Pipe :
             returnOut
         }
 
-    Yield :
-        (value : streamOut)
-        -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
-        -> Inf (Pipe {
-            streamIn,
-            streamOut,
-            returnIn,
-            isInputExhausted,
-            historyIn,
-            historyOut = (value :: historyOut),
-            streamInvariant,
-            returnInvariant,
-            effects,
-            returnOut
-        })
-        -> Pipe {
-            streamIn,
-            streamOut,
-            returnIn,
-            isInputExhausted,
-            historyIn,
-            historyOut,
-            streamInvariant,
-            returnInvariant,
-            effects,
-            returnOut
-        }
-
+    ||| The `Await` pipe action transfers control over to the upstream pipe until
+    ||| the upstream pipe yields a value or returns a value, in which case
+    ||| control transfers back to the current pipe through the corresponding
+    ||| continuation pipe. This is effectively "pulling" data from upstream.
+    |||
+    ||| You can only construct an `Await` pipe action if you can guarantee that
+    ||| the pipe currently hasn't exhausted its upstream yet.
+    |||
+    ||| @ returnContinuation The pipe state to run next if upstream returns.
+    |||   The return continuation is given the value that the upstream returned,
+    |||   in addition to the proof that this upstream return value satisfies
+    |||   upstream's return invariant.
+    ||| @ streamContinuation The pipe state to run if upstream yields a value.
+    |||   The stream continuation is given the value that the upstream has yielded.
     Await :
-        (returnIn
+        (returnContinuation :
+            returnIn
             -> {0 upstreamReturnProperty : Type}
             -> (0 upstreamReturnProof : upstreamReturnProperty)
             -> Inf (Pipe {
@@ -143,7 +337,8 @@ data Pipe :
                 effects,
                 returnOut
             }))
-        -> ((value : streamIn)
+        -> (streamContinuation :
+            (value : streamIn)
             -> Inf (Pipe {
                 streamIn,
                 streamOut,
@@ -169,6 +364,13 @@ data Pipe :
             returnOut
         }
 
+    ||| The `Return` pipe action represents the pipe returning a value to downstream,
+    ||| and signifies that the current pipe has terminated and will no longer yield
+    ||| any more values.
+    |||
+    ||| @ returnValue The value to return to downstream.
+    ||| @ returnInvariantProof Proof that the current pipe is allowed to return
+    |||   at this point in time with `returnValue`.
     Return :
         (returnValue : returnOut)
         -> (0 returnInvariantProof : returnInvariant isInputExhausted historyIn historyOut returnValue)
@@ -218,10 +420,21 @@ lazyPure :
 lazyPure = pure
 
 
+||| Transform a pipe by changing what happens instead of returning.
+||| This is primarily used to describe a sequence of pipe states
+||| in terms of smaller pipes, via our fake monadic bind operator (`>>=`).
+|||
+||| Note: At this stage, it seems a bit difficult to compose the
+||| return invariants together, and so our current implementation
+||| for this function only supports pipes that have no return invariants.
+|||
+||| @ originalPipe The pipe to transform
+||| @ mapReturn The function which takes the final return value of the original
+|||   pipe and maps it into a different pipe.
 covering
 recurseToReturn :
     Monad effects
-    => Pipe {
+    => (originalPipe: Pipe {
         streamIn,
         streamOut,
         returnIn,
@@ -232,8 +445,8 @@ recurseToReturn :
         returnInvariant = NoReturnInvariant,
         effects,
         returnOut = returnOutA
-    }
-    -> (
+    })
+    -> (mapReturn :
         (0 mapHistoryIn : List streamIn)
         -> (0 mapHistoryOut : List streamOut)
         -> returnOutA
@@ -311,6 +524,41 @@ recurseToReturn pipe mapReturn = recurse
         = mapReturn historyIn historyOut value
 
 
+||| Constructs a pipe defined as a sequence of running the first pipe, followed
+||| by the second pipe given what the first pipe returned. This is our equivalent
+||| of the monadic bind operator. Originally, we actually legitimately implemented
+||| the `Monad` interface for `Pipe`, but things grew complicated when we started
+||| added proofs to it, so it was easier to just implement the `>>=` operator.
+|||
+||| Typically, you'd use this operator indirectly using do-notation:
+|||
+||| ```idris
+||| overallPipe = do
+|||     value <- lift getLine
+|||     _ <- yield value
+||| ```
+|||
+||| This would be equivalent to writing it out in full:
+|||
+||| ```idris
+||| overallPipe = (lift getLine) >>= (\value => yield value)
+||| ```
+|||
+||| Or equivalently:
+|||
+||| ```idris
+||| overallPipe = (Do getLine (\value => Return value)) >>= (\value => Yield value (Return ()))
+||| ```
+|||
+||| Or equivalently, without using our `(>>=)` operator:
+|||
+||| ```idris
+||| overallPipe = (Do getLine (\value => Yield value (Return ())))
+||| ```
+|||
+||| Note: At this stage, it seems a bit difficult to compose the
+||| return invariants together, and so our current implementation
+||| for this function only supports pipes that have no return invariants.
 export
 covering
 (>>=) :
@@ -358,6 +606,12 @@ effects >>= function
     = recurseToReturn effects (\mapHistoryIn, mapHistoryOut, value => function value)
 
 
+||| Constructs a pipe that performs the given effect and immediately returns the value
+||| produced by that effect. Useful for chaining a sequence of pipe actions monadically
+||| using the `(>>=)` operator or via do-notation. This is an alternative for
+||| constructing a `Do` action manually. See `yield`, a similar function but for the
+||| `Yield` action instead of `Do`. Also see `(>>=)` for usage examples.
+export
 lift :
     Monad effects
     => effects returnOut
@@ -365,7 +619,32 @@ lift :
 lift effects = Do (effects >>= \value => lazyPure (Return value ()))
 
 
--- Recurse to Do and map it from Identity to effect
+||| Constructs a pipe that yields a value and immediately returns the unit value `()`.
+||| Useful for chaining a sequence of pipe actions monadically using the `(>>=)` operator
+||| or via do-notaion. This is an alternative for constructing a `Yield` action manually.
+||| See `lift`, a similar function but for the `Do` action instead of `Yield`.
+||| Also see `(>>=)` for usage examples.
+export
+yield :
+    (value : streamOut)
+    -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
+    -> Pipe {
+        streamIn,
+        streamOut,
+        returnIn,
+        isInputExhausted,
+        historyIn,
+        historyOut,
+        streamInvariant,
+        effects,
+        returnOut = ()
+    }
+-- We set Return () as the initial continuation, which can then be built upon monadically
+yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return () ())
+
+
+||| Allows a pure pipe (i.e. a pipe whose `effects` is the `Identity` monad) to
+||| be used in places that uses a different `effects` type.
 export
 covering
 fromPurePipe :
@@ -393,6 +672,11 @@ fromPurePipe :
         returnOut
     }
 fromPurePipe pipe = recurse pipe where
+    ||| Recurse, preserving everything about the original pipe, except
+    ||| for `Do` actions where we map the original action into
+    ||| the equivalent for the given `effects` monad. Since
+    ||| the original pipe uses `Identity` for `effects`, we can
+    ||| trivially extract the pure value using `runIdentity`.
     recurse :
         Inf (Pipe {
             streamIn,
@@ -424,6 +708,12 @@ fromPurePipe pipe = recurse pipe where
     recurse (Return value returnInvariantProof) = Return value returnInvariantProof
 
 
+||| Allow an input-exhausted pipe to be used in places that don't
+||| expect its input to be exhausted yet. This is fine because
+||| an input-exhausted pipe just means that it is not allowed
+||| to yield anything. However, we will be dropping the original
+||| return invariant since that depends on whether the input is
+||| exhausted or not.
 export
 covering
 fromInputExhaustedPipe :
@@ -449,6 +739,8 @@ fromInputExhaustedPipe :
         returnOut
     }
 fromInputExhaustedPipe pipe = recurse pipe where
+    ||| Trivially recurse through the pipe, preserving everything except
+    ||| for changing the type signature and discarding the return proof.
     recurse :
         Pipe {
             streamIn,
@@ -472,9 +764,14 @@ fromInputExhaustedPipe pipe = recurse pipe where
         }
     recurse (Do action) = Do (action >>= \next => lazyPure $ recurse next)
     recurse (Yield value next) = Yield value (recurse next)
-    recurse (Return value returnInvariantProof) = Return value ()
+    recurse (Return value returnInvariantProof) = Return value () -- Discard return proof
 
 
+||| This is a predicate that shows that a particular `IsInputExhausted` value will be
+||| holding the proof for the upstream return invariant once its value is `Yes`.
+||| Useful in conjunction with `upstreamReturnProofFromInputExhausted` which allows
+||| us to package upstream's return proof into downstream's `isInputExhausted` and
+||| then extract it back out when we need it.
 IsInputExhaustedContainsUpstreamReturnProof :
     (IsInputExhausted -> List streamIn -> List streamOut -> returnOut -> Type)
     -> (historyIn : List streamIn)
@@ -491,6 +788,10 @@ IsInputExhaustedContainsUpstreamReturnProof returnInvariant historyIn historyOut
         }
 
 
+||| Extract the upstream proof from downstream's `isInputExhausted` state.
+||| Since the downstream's `isInputExhausted` is free to contain any
+||| value of any type, we need additional information `IsInputExhaustedContainsUpstreamProof`
+||| to constrain it to a type we wanted before we can extract it back out.
 export
 upstreamReturnProofFromInputExhausted :
     {0 returnInvariant : IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type}
@@ -532,6 +833,9 @@ upstreamReturnProofFromInputExhausted (Yes property returnProof) containsUpstrea
         )
 
 
+||| Compose two stream invariants together. Actually, this is dead code, as we soon found out
+||| that we don't have the right information to compose the two just yet, as the
+||| stream invariants don't always hold (i.e. they only hold at the moment a pipe yields).
 composeStreamInvariants :
     (List streamIn -> List streamMid -> Type)
     -> (List streamMid -> List streamOut -> Type)
@@ -546,6 +850,17 @@ composeStreamInvariants streamInvariantUpstream streamInvariantDownstream curren
 
 
 %prefix_record_projections off
+||| Compose the return proofs for two pipes. This is also used to compose two return invariants.
+||| If an upstream pipe is composed with a downstream pipe via `(.|)`, it means the following:
+||| 1. If downstream returned, then we have proof that the downstream invariant is fulfilled.
+||| 2. If we also know that the downstream has its input exhausted when downstream returned,
+|||    then it follows that we also have the upstream pipe's return proof.
+||| In order to talk about the downstream return invariant being fulfilled, it needs to refer
+||| to the list of stream values that the downstream had received, but that information is
+||| erased when we joined the two pipes together. Therefore, our composed proof talks about
+||| "there exists" some `historyMid` for which the downstream invariant is fulfilled. Then,
+||| if we happen to also know that the upstream pipe has also returned, we can also impose some
+||| further constraints as to what this `historyMid` is.
 export
 record ComposedReturnProof
     {0 streamIn : Type}
@@ -622,8 +937,10 @@ covering --todo totality
         effects,
         returnOut
     }
+-- The composed pipe starts with the downstream having control.
 (.|) = pull {midExhaustedContainsUpstreamReturnProof = ()} where
     mutual
+        ||| Service the downstream pipe until it `Await`s for the upstream.
         pull : 
             Monad effects'
             => {0 pullIsInputExhaustedIn : IsInputExhausted}
@@ -698,6 +1015,7 @@ covering --todo totality
                 midExhaustedContainsUpstreamReturnProof
             }
 
+        ||| Service the upstream pipe until it `Yield`s a value back to downstream.
         push :
             Monad effects'
             => {0 pushIsInputExhaustedIn : IsInputExhausted}
@@ -772,6 +1090,11 @@ covering --todo totality
             = pull
                 {
                     pullIsInputExhaustedIn = pushIsInputExhaustedIn,
+
+                    -- Package our upstream return proof into `pullIsInputExhaustedMid`,
+                    -- and also carry a proof that this `IsInputExhausted` does indeed
+                    -- contain the upstream return proof so we can later extract it
+                    -- back out when the downstream also returns.
                     pullIsInputExhaustedMid = Yes _ returnInvariantProof,
                     midExhaustedContainsUpstreamReturnProof = MkErasedDPair value Refl
                 }
@@ -779,25 +1102,13 @@ covering --todo totality
                 (downstreamOnReturn value returnInvariantProof)
 
 
-export
-yield :
-    (value : streamOut)
-    -> {auto 0 streamInvariantProof : streamInvariant historyIn (value :: historyOut)}
-    -> Pipe {
-        streamIn,
-        streamOut,
-        returnIn,
-        isInputExhausted,
-        historyIn,
-        historyOut,
-        streamInvariant,
-        effects,
-        returnOut = ()
-    }
- -- We set Return () as the initial continuation, which can then be built upon monadically
-yield {streamInvariantProof} value = Yield value {streamInvariantProof} (Return () ())
-
-
+||| An `Effect` is a `Pipe` that doesn't receive any stream or return inputs,
+||| nor yields any stream outputs. It only returns a value after performing
+||| some effects.
+|||
+||| This is typically the end result after composing various pipes together.
+||| It means that we have paired all consumer pipes with producer pipes, and
+||| so we are ready to run the pipe with `runPipe`.
 public export
 Effect :
     (effects : Type -> Type)
@@ -817,6 +1128,11 @@ Effect effects returnOut = Pipe {
 }
 
 
+||| This is a more type-rich version of `runPipe` which runs a pipe until it returns a value.
+||| Not only does this function return the final return value of a pipe, but it also provides
+||| a proof that the final return invariant is fulfilled.
+|||
+||| See also `runPurePipeWithList` and `runInputExhaustingPurePipeWithList`.
 export
 covering
 runPipeWithInvariant :
@@ -828,6 +1144,12 @@ runPipeWithInvariant (Yield value _) = absurd value
 runPipeWithInvariant (Return value {returnInvariantProof}) = pure (Element value returnInvariantProof)
 
 
+||| Run a pipe until it returns a value, potentially performing effects in the process.
+|||
+||| See `runPipeWithInvariant` if you want to extract out the return invariant proof as well
+||| as the return value.
+|||
+||| See also `runPurePipeWithList` and `runInputExhaustingPurePipeWithList`.
 export
 covering
 runPipe :
@@ -837,10 +1159,14 @@ runPipe :
 runPipe pipe = map fst $ runPipeWithInvariant pipe
 
 
+||| The return invariant for the `fromList` pipe, extracted out as its own top-level definition
+||| so we can refer back to it in multiple places.
 fromList_returnInvariant : List streamOut -> IsInputExhausted -> List Void -> List streamOut -> () -> Type
 fromList_returnInvariant list _ _ finalHistoryOut _ = reverse finalHistoryOut = list
 
 
+||| Given a `list`, creates a `Pipe` that streams out the contents of that `list`.
+||| Once the `list` is exhausted, the pipe returns the unit value `()`.
 export
 covering
 fromList :
@@ -850,7 +1176,7 @@ fromList :
         streamIn = Void,
         streamOut,
         returnIn = Void,
-        isInputExhausted = Yes () (),
+        isInputExhausted = Yes () (), -- This pipe is guaranteed to not await for any upstream value.
         historyIn = [],
         historyOut = [],
         streamInvariant = \currentHistoryIn, currentHistoryOut
@@ -900,6 +1226,10 @@ fromList list = recurse list proofBaseCase where
                 inductionStep = rewrite reverseMovesHeadToEnd x historyOut in hypothesisRearranged
 
 
+||| Runs a pipe just like `runPipe` and `runPipeWithInvariant`, except that it feeds the given
+||| pipe with a predefined list of stream input values.
+|||
+||| See `runInputExhaustingPurePipeWithList` for a stronger version of this function.
 export
 covering
 runPurePipeWithList :
@@ -931,6 +1261,8 @@ runPurePipeWithList :
 runPurePipeWithList pipe list = runIdentity $ runPipeWithInvariant $ fromList list .| pipe
 
 
+||| Runs a pipe with a given list just like `runPurePipeWithList`, but with the further
+||| restriction that the given pipe must consume all of the list.
 export
 covering
 runInputExhaustingPurePipeWithList :
@@ -1012,6 +1344,8 @@ runInputExhaustingPurePipeWithList pipe list =
         Element returnValue finalProof
 
 
+||| Creates a pipe that uses the given map function to map each individualy
+||| stream value it receives from upstream before yielding the result downstream.
 export
 covering
 mapEach :
@@ -1033,6 +1367,7 @@ mapEach function = Await
     )
 
 
+||| Creates a pipe that folds the stream input down into a single return value.
 export
 covering --todo
 foldPipe :
@@ -1106,6 +1441,7 @@ foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
                         in previousFoldrAppliedOnceEqualsNextFoldr
 
 
+||| A pipe that reads from stdin line by line until reaching EOF.
 export
 covering
 readLines : Has [FileIO, Console] effects => Pipe {
@@ -1130,6 +1466,7 @@ readLines = recurse where
                 recurse
 
 
+||| A pipe that prints each showable value line by line to stdout.
 export
 covering
 printEach :
@@ -1155,6 +1492,14 @@ printEach = recurse where
         )
 
 
+||| A pipe that lazily groups the input using an empty string as a delimiter, and for each
+||| group, it sends the input values to the given inner pipe for it to reduce down to a single
+||| return value which the outer pipe uses as a stream value.
+|||
+||| E.g., if the input was: "1", "2", "3", "", "4", "5", "", "6", then this pipe will stream out
+||| the return value of running the inner pipe with "1", "2", "3", then the return value of
+||| running the inner pipe with "4", "5", and finally the return value of running the inner
+||| pipe with "6".
 export
 covering
 splitByEmptyLine :
@@ -1224,6 +1569,7 @@ splitByEmptyLine initialInnerPipeline = runInnerPipe No initialInnerPipeline whe
             No => runInnerPipe No initialInnerPipeline
 
 
+||| A pipe that takes a stream of strings and converts it to a stream of natural numbers.
 export
 covering
 parseNat : Monad effects => Pipe {
@@ -1238,12 +1584,14 @@ parseNat : Monad effects => Pipe {
 parseNat = mapEach stringToNatOrZ
 
 
+||| The return invariant for the `sum` pipe.
 public export
 sum_returnInvariant : List Nat -> List Void -> Nat -> Type
 sum_returnInvariant finalHistoryIn finalHistoryOut finalReturn
     = (finalReturn = foldr (+) 0 finalHistoryIn)
 
 
+||| A pipe that takes a stream of natural numbers and adds them up.
 export
 covering
 sum :
@@ -1262,12 +1610,14 @@ sum :
 sum = fromPurePipe $ foldPipe (+) 0
 
 
+||| The return invariant for the `max` pipe.
 public export
 max_returnInvariant : List Nat -> List Void -> Nat -> Type
 max_returnInvariant finalHistoryIn finalHistoryOut finalReturn
     = (finalReturn = foldr Data.Nat.maximum 0 finalHistoryIn)
 
 
+||| A pipe that takes a stream of natural numbers and returns the maximum number it has seen.
 export
 covering
 max :
@@ -1286,6 +1636,7 @@ max :
 max = fromPurePipe $ foldPipe maximum 0
 
 
+||| A pipe that prints the return value of the upstream pipe to stdout.
 export
 printReturnValue :
     (Show return, Has [Console] effects)
