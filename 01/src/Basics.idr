@@ -1,10 +1,26 @@
+||| This module contains things that aren't specific to this program, and
+||| should probably be in the standard library, but they aren't at this point.
 module Basics
 
+import Control.App
 import Data.List
 import Data.List.Elem
 import Data.List.Reverse
 import Data.List1
 import Data.Nat
+import System
+
+
+public export
+interface System effects where
+    getArgs : App {l} effects (List String)
+    exitFailure : App {l} effects ()
+
+
+public export
+PrimIO effects => System effects where
+    getArgs = primIO getArgs
+    exitFailure = primIO exitFailure
 
 
 ||| A dependent pair, but where both the `fst` and `snd` are erased at runtime.

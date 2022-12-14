@@ -32,6 +32,8 @@ import Data.List
 import Data.List.Reverse
 import Data.Nat
 import Data.String
+import Data.Vect
+import Data.Vect.Sort
 import System.File.Virtual
 
 import Basics
@@ -1385,7 +1387,7 @@ foldPipe :
     }
 
 foldPipe reducer initialValue = recurse [] initialValue proofBaseCase where
-    proofBaseCase : initialValue = foldr reducer initialValue []
+    proofBaseCase : initialValue = foldr reducer initialValue Prelude.Basics.Nil
     proofBaseCase = Refl
 
     recurse :
@@ -1630,6 +1632,43 @@ max :
         returnOut = Nat
     }
 max = fromPurePipe $ foldPipe maximum 0
+
+
+parameters (n : Nat)
+    maxNReducer : Nat -> Vect n Nat -> Vect n Nat
+    maxNReducer x topN =
+        let
+            combined : Vect (n + 1) Nat
+            combined =
+                rewrite
+                    plusCommutative n 1
+                in
+                    reverse $ sort (x :: topN)
+        in
+            take n combined
+
+    maxNInitial : Vect n Nat
+    maxNInitial = replicate n 0
+
+    ||| A pipe that takes a stream of natural numbers and returns the top N numbers it has seen
+    export
+    covering
+    maxN :
+        Monad effects
+        => Pipe {
+            streamIn = Nat,
+            streamOut = Void,
+            returnIn = (),
+            isInputExhausted = No,
+            historyIn = [],
+            historyOut = [],
+            returnInvariant = ExhaustsInputAnd $
+                \historyIn, historyOut, returnValue
+                    => (returnValue = foldr VerifiedSewage.maxNReducer VerifiedSewage.maxNInitial historyIn),
+            effects,
+            returnOut = Vect n Nat
+        }
+    maxN = fromPurePipe $ foldPipe maxNReducer maxNInitial
 
 
 ||| A pipe that prints the return value of the upstream pipe to stdout.
