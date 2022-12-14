@@ -14,8 +14,7 @@ covering
 app : Has [FileIO, Console] effects => Control.App.App effects ()
 app = runPipe $
     readLines
-    .| splitByEmptyLine (parseNat .| printEach .| sum)
-    .| printEach
+    .| splitByEmptyLine (parseNat .| sum)
     .| max
     .| printReturnValue
 
@@ -23,5 +22,5 @@ app = runPipe $
 covering
 main : IO ()
 main = run $ handle app
-    (\() => putStr "Ok")
-    (\error : IOError => putStr "Error")
+    (\() => pure ())
+    (\error : IOError => putStr "An error has occured: \{show error}")

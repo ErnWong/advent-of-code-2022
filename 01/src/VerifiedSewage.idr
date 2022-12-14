@@ -1452,7 +1452,6 @@ readLines : Has [FileIO, Console] effects => Pipe {
 readLines = recurse where
     recurse : Pipe Void String Void (App effects) ()
     recurse = do
-        _ <- lift $ putStrLn "Reading next line..."
         -- TODO: Does this skip the last line?
         line <- lift getLine
         eof <- lift $ fEOF stdin
@@ -1482,7 +1481,6 @@ printEach = recurse where
     recurse = Await
         (\returnValue, returnProof => Return () ())
         (\streamValue => do
-            _ <- lift $ putStrLn "Printing..."
             _ <- lift $ putStrLn (show streamValue)
             _ <- yield streamValue
             recurse
