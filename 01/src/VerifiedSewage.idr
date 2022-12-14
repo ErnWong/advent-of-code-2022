@@ -53,7 +53,7 @@ data IsInputExhausted : Type where
     No : IsInputExhausted
 
     ||| Upstream has been exhausted (an optionally here we also supply a proof
-    ||| that the upstream did indeed give us a return value). This menas that
+    ||| that the upstream did indeed give us a return value). This means that
     ||| this pipe cannot await for any more data.
     |||
     ||| Alternatively, we can specify that a pipe will never await for stream
@@ -133,7 +133,7 @@ NoReturnInvariant _ _ _ _ = ()
 |||
 ||| ```idris
 ||| Pipe {
-|||     returnInvariant = ExhaustsInpuAnd $
+|||     returnInvariant = ExhaustsInputAnd $
 |||         \historyIn, historyOut, returnValue =>
 |||             historyOut = map (\x => 2 * x) historyIn
 ||| }
@@ -169,13 +169,14 @@ ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue
 |||
 |||  1. `Do` - performing some effect, followed by the next pipe state.
 |||  2. `Await` - pull data from upstream, which is either followed by
-|||     the next pipe state should upstream return its final value,
-|||     or followed by the next pipe state should upstream yield
+|||     the next pipe state should the upstream return its final value,
+|||     or followed by the next pipe state should the upstream yield
 |||     the next stream value.
 |||  3. `Yield` - push data downstream, which is followed by
 |||     the next pipe state.
 |||  4. `Return` - terminate this stream by returning a value, and
-|||     ***not*** followed by any subsequent pipe.
+|||     unlike the other pipe actions, this is ***not*** followed by any
+|||     subsequent pipe state.
 |||
 ||| A `Pipe` can be given a `streamInvariant` and a `returnInvariant`,
 ||| which describes the properties that must hold when a pipe yields
@@ -183,7 +184,7 @@ ExhaustsInputAnd otherReturnInvariant (Yes _ _) historyIn historyOut returnValue
 ||| must supply proofs for these invariants when yielding or returning
 ||| a value.
 |||
-||| Note: At the moment, the `streamInvariant` only holds every time
+||| Note: At the moment, the `streamInvariant` is only enforced at the times
 ||| this pipe yields a stream output value, and it's not enforced when
 ||| awaited a new stream input value. This is because our `streamInvariant`
 ||| is a bit too free-form: the `streamInvariant` could be imposing
