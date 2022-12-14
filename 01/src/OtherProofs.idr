@@ -10,6 +10,8 @@ module OtherProofs
 
 import Control.Monad.Identity
 import Data.DPair
+import Data.List1
+import Data.List.Elem
 import Data.Nat
 
 import Basics
@@ -40,3 +42,52 @@ covering
     ) = foldr Data.Nat.maximum 0 (reverse input)
 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input
     = snd $ runInputExhaustingPurePipeWithList max input
+
+
+maxPipeReturnsAnInputValueIfItExists :
+    (input : List1 Nat)
+    -> Elem
+        (fst $ runInputExhaustingPurePipeWithList
+                {returnInvariant = VerifiedSewage.max_returnInvariant}
+                VerifiedSewage.max
+                (forget input)
+        )
+        (forget input)
+maxPipeReturnsAnInputValueIfItExists input =
+    let
+        foldrProof : Elem (foldr Data.Nat.maximum 0 (reverse $ forget input)) $ forget input
+        foldrProof =
+            rewrite
+                sym $ foldrMaxSameWhenReversed $ forget input
+            in
+                foldrMaxIsElementOfNonemptyList input
+    in
+        rewrite
+            forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax (forget input)
+        in
+            foldrProof
+
+
+maxPipeReturnsTheUpperBoundOfItsInputs :
+    (input : List Nat)
+    -> (element : Nat)
+    -> (elementIsInList : Elem element input)
+    -> (element `LTE` fst (
+        runInputExhaustingPurePipeWithList
+            {returnInvariant = VerifiedSewage.max_returnInvariant}
+            VerifiedSewage.max
+            input
+    ))
+maxPipeReturnsTheUpperBoundOfItsInputs input x xIsAnInput =
+    let
+        foldrProof : x `LTE` foldr Data.Nat.maximum 0 (reverse input)
+        foldrProof =
+            rewrite
+                sym $ foldrMaxSameWhenReversed input
+            in
+                foldrMaxIsUpperBound input x xIsAnInput
+    in
+        rewrite
+            forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input
+        in
+            foldrProof
