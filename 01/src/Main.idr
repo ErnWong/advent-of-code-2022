@@ -23,4 +23,4 @@ covering
 main : IO ()
 main = run $ handle app
     (\() => pure ())
-    (\error : IOError => putStr "An error has occured: \{show error}")
+    (\error : IOError => putStrLn "An error has occured: \{show error}")
