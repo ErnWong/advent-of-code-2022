@@ -793,7 +793,7 @@ IsInputExhaustedContainsUpstreamReturnProof returnInvariant historyIn historyOut
 ||| value of any type, we need additional information `IsInputExhaustedContainsUpstreamProof`
 ||| to constrain it to a type we wanted before we can extract it back out.
 export
-upstreamReturnProofFromInputExhausted :
+0 upstreamReturnProofFromInputExhausted :
     {0 returnInvariant : IsInputExhausted -> List streamIn -> List streamMid -> returnMid -> Type}
     -> {0 historyIn : List streamIn}
     -> {0 historyMid : List streamMid}
@@ -812,7 +812,7 @@ upstreamReturnProofFromInputExhausted :
             => Exists $ \returnProof
                 => (isInputExhaustedMid = Yes property returnProof)
     )
-    -> ErasedThing $ ErasedDPair {
+    -> ErasedDPair {
         a = returnMid,
         b = \finalReturnMid => returnInvariant isInputExhaustedIn historyIn historyMid finalReturnMid
     }
@@ -822,7 +822,7 @@ upstreamReturnProofFromInputExhausted isInputExhaustedMid@No _ proofThatWeDidExh
         `trans`
         (the (isInputExhaustedMid = Yes _ _) (snd $ snd proofThatWeDidExhaust))
 upstreamReturnProofFromInputExhausted (Yes property returnProof) containsUpstreamReturnProof _
-    = MkErasedThing $ MkErasedDPair
+    = MkErasedDPair
         (fst containsUpstreamReturnProof)
         (
             rewrite
@@ -1325,14 +1325,11 @@ runInputExhaustingPurePipeWithList pipe list =
                 proofs.downstreamProof
 
         0 proofThatReverseOfHistoryMidEqualsList : reverse proofs.historyMid = list
-        proofThatReverseOfHistoryMidEqualsList =
-            let
-                MkErasedThing returnProofPair = upstreamReturnProofFromInputExhausted
-                    proofs.isInputExhaustedMid
-                    proofs.midExhaustedContainsUpstreamReturnProof
-                    midIsExhausted
-            in
-                snd $ returnProofPair
+        proofThatReverseOfHistoryMidEqualsList = snd $
+            upstreamReturnProofFromInputExhausted
+                proofs.isInputExhaustedMid
+                proofs.midExhaustedContainsUpstreamReturnProof
+                midIsExhausted
 
         0 proofThatHistoryMidEqualsReverseOfList : proofs.historyMid = reverse list
         proofThatHistoryMidEqualsReverseOfList

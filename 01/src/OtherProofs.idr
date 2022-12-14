@@ -17,30 +17,26 @@ import VerifiedSewage
 
 
 covering
-forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum :
+0 forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum :
     (input : List Nat)
-    -> ErasedThing (
-        fst (
-            runInputExhaustingPurePipeWithList
-                {returnInvariant = VerifiedSewage.sum_returnInvariant}
-                VerifiedSewage.sum
-                input
-        ) = foldr (+) 0 (reverse input)
-    )
+    -> fst (
+        runInputExhaustingPurePipeWithList
+            {returnInvariant = VerifiedSewage.sum_returnInvariant}
+            VerifiedSewage.sum
+            input
+    ) = foldr (+) 0 (reverse input)
 forAllPossibleInputs_sumPipeIsEquivalentToFoldrSum input
-    = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList sum input
+    = snd $ runInputExhaustingPurePipeWithList sum input
 
 
 covering
-forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
+0 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax :
     (input : List Nat)
-    -> ErasedThing (
-        fst (
-            runInputExhaustingPurePipeWithList
-                {returnInvariant = VerifiedSewage.max_returnInvariant}
-                VerifiedSewage.max
-                input
-        ) = foldr Data.Nat.maximum 0 (reverse input)
-    )
+    -> fst (
+        runInputExhaustingPurePipeWithList
+            {returnInvariant = VerifiedSewage.max_returnInvariant}
+            VerifiedSewage.max
+            input
+    ) = foldr Data.Nat.maximum 0 (reverse input)
 forAllPossibleInputs_maxPipeIsEquivalentToFoldrMax input
-    = MkErasedThing $ snd $ runInputExhaustingPurePipeWithList max input
+    = snd $ runInputExhaustingPurePipeWithList max input
