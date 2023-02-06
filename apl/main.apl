@@ -3,7 +3,8 @@ day1 ← ⊃⎕NGET 'day1.txt'1
 ⎕ ← 'day 1 part 2:', +/{⍵[3↑⍒⍵]}+/¨      ⍎¨¨{(0≠≢¨⍵)⊆⍵}  day1
 
 day2 ← ⊃⎕NGET 'day2.txt'1
-⎕ ← 'day 2 part 1:', +/{{1+⍵[3]+3×3|1+⍵[3]-⍵[1]} ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
+⎕ ← 'day 2 part 1:', +/{{1+⍵[3]+3×3|1+⍵[3]-⍵[1]}       ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
+⎕ ← 'day 2 part 2:', +/{{(1+3|⍵[1]+⍵[3]-1)+3×⍵[3]}     ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
 ⍝  
 ⍝  ⎕←day3←'vJrwpWtwJgWrhcsFMMfFFhFp' 'jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL' 'PmmdzqPrVvPwwTWBwg' 'wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn' 'ttgJtRGJQctTZtZT' 'CrZsJsPPZsGzwwsLwLmpwMDw'
 ⍝  +/((⎕C ⎕A),⎕A)⍳{⊃∪((2÷⍨≢⍵)↑⍵)∩((2÷⍨≢⍵)↓⍵)}¨  ⎕NGET 'day3.txt'
