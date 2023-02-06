@@ -6,8 +6,8 @@ day2 ← ⊃⎕NGET 'day2.txt'1
 ⎕ ← 'day 2 part 1:', +/{{1+⍵[3]+3×3|1+⍵[3]-⍵[1]}       ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
 ⎕ ← 'day 2 part 2:', +/{{(1+3|⍵[1]+⍵[3]-1)+3×⍵[3]}     ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
 ⍝  
-⍝  ⎕←day3←'vJrwpWtwJgWrhcsFMMfFFhFp' 'jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL' 'PmmdzqPrVvPwwTWBwg' 'wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn' 'ttgJtRGJQctTZtZT' 'CrZsJsPPZsGzwwsLwLmpwMDw'
-⍝  +/((⎕C ⎕A),⎕A)⍳{⊃∪((2÷⍨≢⍵)↑⍵)∩((2÷⍨≢⍵)↓⍵)}¨  ⎕NGET 'day3.txt'
+day3 ← ⊃⎕NGET 'day3.example.txt'1
+⎕ ← 'day 3 part 1:', +/((⎕C ⎕A),⎕A)⍳  {⊃∪ ((2÷⍨≢⍵)↑⍵) ∩ ((2÷⍨≢⍵)↓⍵)}¨  day3
 ⍝  
 ⍝  ⎕←day4←'2-4,6-8' '2-3,4-5' '5-7,7-9' '2-8,3-7' '6-6,4-6' '2-6,4-8'
 ⍝  0≥1↑⍤1⊢{(⍵-4⌽⍵)×((2⌽⍵)-6⌽⍵)}⎕D⍳↑day4
