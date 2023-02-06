@@ -2,9 +2,8 @@ day1 ← ⊃⎕NGET 'day1.txt'1
 ⎕ ← 'day 1 part 1:', ⌈/+/¨               ⍎¨¨{(0≠≢¨⍵)⊆⍵}  day1
 ⎕ ← 'day 1 part 2:', +/{⍵[3↑⍒⍵]}+/¨      ⍎¨¨{(0≠≢¨⍵)⊆⍵}  day1
 
-⍝  ⎕←day2←'A Y' 'B X' 'C Z'
-⍝  todo... {⍵-(⎕A⍳'A X')}¨↓⎕A⍳↑   ⎕NGET 'day2.txt'
-⍝  {4++/¯3 0 4×⍵-(⎕A⍳'A X')}¨↓⎕A⍳↑    ⎕NGET 'day2.txt'
+day2 ← ⊃⎕NGET 'day2.example.txt'1
+⎕ ← 'day 2 part 1:', +/ {4 + +/ ¯3 0 4 × ⍵ - (⎕A⍳'A X')}¨↓⎕A⍳↑    day2
 ⍝  
 ⍝  ⎕←day3←'vJrwpWtwJgWrhcsFMMfFFhFp' 'jqHRNqRjqzjGDLGLrsFMfFZSrLrFZsSL' 'PmmdzqPrVvPwwTWBwg' 'wMqvLMZHhHMvwLHjbvcjnnSBnvTQFn' 'ttgJtRGJQctTZtZT' 'CrZsJsPPZsGzwwsLwLmpwMDw'
 ⍝  +/((⎕C ⎕A),⎕A)⍳{⊃∪((2÷⍨≢⍵)↑⍵)∩((2÷⍨≢⍵)↓⍵)}¨  ⎕NGET 'day3.txt'
