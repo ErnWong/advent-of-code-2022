@@ -10,7 +10,7 @@ day3 ← ⊃⎕NGET 'day3.txt'1
 ⎕ ← 'day 3 part 1:', +/((⎕C ⎕A),⎕A)⍳  {⊃∪ ((2÷⍨≢⍵)↑⍵) ∩ ((2÷⍨≢⍵)↓⍵)}¨   day3
 ⎕ ← 'day 3 part 2:', +/((⎕C ⎕A),⎕A)⍳     ⊃,/∪¨∩/     (3÷⍨≢day3) 3 ⍴     day3
 
-day4 ← ⊃⎕NGET 'day4.example.txt'1
+day4 ← ⊃⎕NGET 'day4.txt'1
 ⎕ ← 'day 4 part 1:', +⌿0≥   1↑⍤1⊢   {(⍵-2⌽⍵)×((1⌽⍵)-3⌽⍵)}   ⍎¨↑{⍵⊆⍨~⍵∊'-,'}¨   day4
 ⍝  
 ⍝  ⎕←day5split←{(0≠≢¨⍵)⊆⍵}day5
